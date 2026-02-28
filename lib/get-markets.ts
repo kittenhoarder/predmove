@@ -17,9 +17,17 @@ function filterByCategory(
   );
 }
 
-function sortMarkets(markets: ProcessedMarket[], sort: SortMode): ProcessedMarket[] {
+function sortMarkets(
+  markets: ProcessedMarket[],
+  sort: SortMode,
+  watchlistIds?: string[]
+): ProcessedMarket[] {
   const copy = [...markets];
   switch (sort) {
+    case "movers1h":
+      return copy.sort(
+        (a, b) => Math.abs(b.oneHourChange) - Math.abs(a.oneHourChange)
+      );
     case "gainers":
       return copy
         .filter((m) => m.oneDayChange > 0)
@@ -37,6 +45,12 @@ function sortMarkets(markets: ProcessedMarket[], sort: SortMode): ProcessedMarke
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
+    case "watchlist": {
+      const ids = new Set(watchlistIds ?? []);
+      return copy
+        .filter((m) => ids.has(m.id))
+        .sort((a, b) => Math.abs(b.oneDayChange) - Math.abs(a.oneDayChange));
+    }
     case "movers":
     default:
       return copy.sort(
@@ -49,6 +63,8 @@ export interface GetMarketsOptions {
   sort?: SortMode;
   category?: string;
   offset?: number;
+  /** Comma-separated market IDs for the watchlist sort mode */
+  watchlistIds?: string[];
 }
 
 /**
@@ -61,6 +77,7 @@ export async function getMarkets(
   const sort: SortMode = opts.sort ?? "movers";
   const category = opts.category ?? "all";
   const offset = opts.offset ?? 0;
+  const watchlistIds = opts.watchlistIds ?? [];
   const fetchedAt = new Date().toISOString();
 
   let markets: ProcessedMarket[] = [];
@@ -76,7 +93,7 @@ export async function getMarkets(
   }
 
   const filtered = filterByCategory(markets, category);
-  const sorted = sortMarkets(filtered, sort);
+  const sorted = sortMarkets(filtered, sort, watchlistIds);
   const paginated = sorted.slice(offset, offset + PAGE_LIMIT);
 
   return {

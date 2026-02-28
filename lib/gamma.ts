@@ -101,3 +101,16 @@ export async function fetchTags(): Promise<GammaTag[]> {
   }
   return res.json();
 }
+
+/**
+ * Fetch a single event by slug. Returns null if not found or on error.
+ * Used by the market detail / OG image routes.
+ */
+export async function fetchEventBySlug(slug: string): Promise<GammaEvent | null> {
+  const params = new URLSearchParams({ slug });
+  const url = `${GAMMA_BASE}/events?${params.toString()}`;
+  const res = await fetchWithTimeout(url);
+  if (!res.ok) return null;
+  const data: GammaEvent[] = await res.json();
+  return data.find((e) => e.slug === slug) ?? null;
+}

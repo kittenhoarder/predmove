@@ -46,6 +46,46 @@ async function fetchPriceHistory(tokenId: string): Promise<ChartPoint[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Recent trades fetch (data-api.polymarket.com)
+// ---------------------------------------------------------------------------
+
+interface RawTrade {
+  side: "BUY" | "SELL";
+  size: number;
+  price: number;
+  timestamp: number;
+  pseudonym: string;
+  outcome: string;
+  transactionHash: string;
+}
+
+interface RecentTrade {
+  side: "BUY" | "SELL";
+  sizeUsd: number;
+  price: number;
+  timestamp: number;
+  pseudonym: string;
+  outcome: string;
+  txHash: string;
+}
+
+async function fetchRecentTrades(clobTokenId: string): Promise<RecentTrade[]> {
+  const url = `https://data-api.polymarket.com/trades?market=${clobTokenId}&limit=10`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`trades ${res.status}`);
+  const data: RawTrade[] = await res.json();
+  return data.map((t) => ({
+    side: t.side,
+    sizeUsd: t.size * t.price,
+    price: t.price,
+    timestamp: t.timestamp,
+    pseudonym: t.pseudonym || t.transactionHash.slice(0, 8),
+    outcome: t.outcome,
+    txHash: t.transactionHash,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
@@ -109,6 +149,8 @@ export default function ExpandedPanel({ market }: ExpandedPanelProps) {
   const [chartData, setChartData] = useState<ChartPoint[] | null>(null);
   const [chartError, setChartError] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [trades, setTrades] = useState<RecentTrade[] | null>(null);
+  const [tradesError, setTradesError] = useState(false);
 
   // Lazy-fetch price history once on first render of the expansion
   useEffect(() => {
@@ -116,6 +158,9 @@ export default function ExpandedPanel({ market }: ExpandedPanelProps) {
     fetchPriceHistory(market.clobTokenId)
       .then(setChartData)
       .catch(() => setChartError(true));
+    fetchRecentTrades(market.clobTokenId)
+      .then(setTrades)
+      .catch(() => setTradesError(true));
   }, [market.clobTokenId]);
 
   const polymarketUrl = `https://polymarket.com/event/${market.eventSlug}`;
@@ -276,7 +321,66 @@ export default function ExpandedPanel({ market }: ExpandedPanelProps) {
         </div>
       )}
 
-      {/* Section D — Resolution */}
+      {/* Section D — Recent trades (why did it move?) */}
+      {market.clobTokenId && (
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+            Recent activity
+          </p>
+          {!trades && !tradesError && (
+            <div className="space-y-1.5">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-7 bg-muted rounded animate-pulse" />
+              ))}
+            </div>
+          )}
+          {tradesError && (
+            <p className="text-xs text-muted-foreground">Activity unavailable</p>
+          )}
+          {trades && trades.length === 0 && (
+            <p className="text-xs text-muted-foreground">No recent trades</p>
+          )}
+          {trades && trades.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {trades.map((trade) => {
+                const isBuy = trade.side === "BUY";
+                return (
+                  <div
+                    key={trade.txHash}
+                    className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`shrink-0 font-semibold ${
+                          isBuy ? "text-emerald-500" : "text-red-500"
+                        }`}
+                      >
+                        {isBuy ? "BUY" : "SELL"}
+                      </span>
+                      <span className="text-muted-foreground truncate">
+                        {trade.pseudonym}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 tabular-nums">
+                      <span className="text-foreground font-medium">
+                        ${trade.sizeUsd < 1 ? trade.sizeUsd.toFixed(2) : trade.sizeUsd.toFixed(0)}
+                      </span>
+                      <span className="text-muted-foreground">
+                        @{(trade.price * 100).toFixed(1)}¢
+                      </span>
+                      <span className="text-muted-foreground hidden sm:inline">
+                        {formatDistanceToNow(new Date(trade.timestamp * 1000), { addSuffix: true })}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Section E — Resolution */}
       {(market.description || market.resolutionSource) && (
         <div className="flex flex-col gap-1.5">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">

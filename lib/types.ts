@@ -126,8 +126,10 @@ export interface MarketsApiResponse {
 
 export type SortMode =
   | "movers"
+  | "movers1h"
   | "gainers"
   | "losers"
   | "volume"
   | "liquidity"
-  | "new";
+  | "new"
+  | "watchlist";
