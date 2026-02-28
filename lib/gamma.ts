@@ -32,13 +32,15 @@ async function fetchEventsPage(offset: number): Promise<GammaEvent[]> {
     closed: "false",
     limit: String(PAGE_SIZE),
     offset: String(offset),
-    order: "volume_24hr",
+    // camelCase field name — volume_24hr (underscore) is rejected with 422
+    order: "volume24hr",
     ascending: "false",
   });
   const url = `${GAMMA_BASE}/events?${params.toString()}`;
   const res = await fetchWithTimeout(url);
   if (!res.ok) {
-    console.warn(`[gamma] Non-OK response ${res.status} at offset ${offset}, skipping page`);
+    const body = await res.text().catch(() => "");
+    console.error(`[gamma] ${res.status} at offset ${offset}: ${body}`);
     return [];
   }
   const data: GammaEvent[] = await res.json();
