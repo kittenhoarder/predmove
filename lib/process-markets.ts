@@ -87,6 +87,7 @@ function processMarket(
   return {
     id: market.id,
     question: market.question,
+    source: "polymarket",
     eventSlug: event.slug,
     eventTitle: event.title,
     categoryslugs: slugs,
