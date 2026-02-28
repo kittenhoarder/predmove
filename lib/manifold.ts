@@ -98,7 +98,6 @@ export async function fetchManifoldMarkets(): Promise<ProcessedMarket[]> {
     const msToClose = m.closeTime ? m.closeTime - now : Infinity;
     // Skip already-closed markets
     if (msToClose < 0) continue;
-    const daysToClose = msToClose === Infinity ? 365 : msToClose / (1000 * 60 * 60 * 24);
 
     results.push({
       id: m.id,

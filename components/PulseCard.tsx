@@ -153,14 +153,26 @@ export default function PulseCard({ index, large = false }: PulseCardProps) {
                 ] as const
               ).map(({ key, label, pct }) => {
                 const val = index.signals[key];
+                // Center-origin: signal bars grow right (bullish) or left (bearish) from midpoint
+                const isBullish = val >= 50;
+                const fillPct = (Math.abs(val - 50) / 50) * 100;
                 return (
                   <div key={key} className="flex items-center gap-1.5">
                     <span className="text-[10px] text-muted-foreground/60 w-16 shrink-0 truncate">{label}</span>
-                    <div className="flex-1 min-w-0 h-1 bg-muted/30 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{ width: `${val}%`, backgroundColor: colors.hex }}
-                      />
+                    <div className="relative flex-1 min-w-0 h-1 bg-muted/30 rounded-full overflow-hidden">
+                      {isBullish ? (
+                        <div
+                          className="absolute top-0 h-full"
+                          style={{ left: "50%", width: `${fillPct / 2}%`, backgroundColor: colors.hex }}
+                        />
+                      ) : (
+                        <div
+                          className="absolute top-0 h-full"
+                          style={{ right: "50%", width: `${fillPct / 2}%`, backgroundColor: colors.hex }}
+                        />
+                      )}
+                      {/* Center divider */}
+                      <div className="absolute left-1/2 top-0 h-full w-px bg-border/60 -translate-x-px" />
                     </div>
                     <span className="text-[10px] tabular-nums text-muted-foreground w-5 text-right shrink-0">{val}</span>
                     <span className="text-[10px] text-muted-foreground/30 w-5 shrink-0">{pct}</span>
