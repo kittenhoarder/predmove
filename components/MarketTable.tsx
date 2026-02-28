@@ -1,12 +1,21 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { formatDistanceToNow } from "date-fns";
 import type { MarketsApiResponse, SortMode } from "@/lib/types";
 import SortTabs from "./SortTabs";
 import CategoryFilter from "./CategoryFilter";
 import MarketRow from "./MarketRow";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 
 const PAGE_LIMIT = 100;
 
@@ -24,7 +33,6 @@ function buildUrl(sort: SortMode, category: string, offset: number): string {
 interface MarketTableProps {
   initialSort?: SortMode;
   initialCategory?: string;
-  // Pre-fetched data from the Server Component for instant first paint
   initialData?: MarketsApiResponse;
 }
 
@@ -36,12 +44,17 @@ export default function MarketTable({
   const [sort, setSort] = useState<SortMode>(initialSort);
   const [category, setCategory] = useState(initialCategory);
   const [offset, setOffset] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
 
+  const { mutate } = useSWRConfig();
   const url = buildUrl(sort, category, offset);
 
   const { data, error, isLoading, isValidating } = useSWR(url, fetcher, {
-    fallbackData: offset === 0 && sort === initialSort ? initialData : undefined,
-    refreshInterval: 60_000,
+    fallbackData: offset === 0 && sort === initialSort && category === initialCategory
+      ? initialData
+      : undefined,
+    refreshInterval: 0, // Manual refresh only — cron runs daily
     revalidateOnFocus: false,
     keepPreviousData: true,
   });
@@ -51,96 +64,130 @@ export default function MarketTable({
     setOffset(0);
   }, []);
 
-  const handleCategoryChange = useCallback((newCategory: string) => {
-    setCategory(newCategory);
+  const handleCategoryChange = useCallback((newCat: string) => {
+    setCategory(newCat);
     setOffset(0);
   }, []);
+
+  const handleManualRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    setRefreshMsg(null);
+    try {
+      const cronSecret = process.env.NEXT_PUBLIC_CRON_SECRET;
+      const res = await fetch("/api/cron/refresh", {
+        method: "GET",
+        headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      const body = await res.json();
+      setRefreshMsg(`Fetched ${body.markets} markets in ${body.elapsedMs}ms`);
+      // Invalidate all cached SWR keys so the table reloads
+      await mutate(() => true, undefined, { revalidate: true });
+    } catch (err) {
+      setRefreshMsg(err instanceof Error ? err.message : "Refresh failed");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [mutate]);
 
   const markets = data?.markets ?? [];
   const totalMarkets = data?.totalMarkets ?? 0;
   const hasMore = offset + PAGE_LIMIT < totalMarkets;
   const hasPrev = offset > 0;
 
-  const lastUpdatedText = data?.cachedAt
+  const cachedAtText = data?.cachedAt
     ? formatDistanceToNow(new Date(data.cachedAt), { addSuffix: true })
     : null;
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Controls */}
+      {/* Controls row */}
       <div className="flex flex-col gap-3">
         <SortTabs active={sort} onChange={handleSortChange} />
         <CategoryFilter active={category} onChange={handleCategoryChange} />
       </div>
 
       {/* Status bar */}
-      <div className="flex items-center justify-between text-xs text-gray-500">
-        <span>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-xs text-muted-foreground">
           {totalMarkets > 0 ? (
             <>
               Showing {offset + 1}–{Math.min(offset + PAGE_LIMIT, totalMarkets)}{" "}
-              of {totalMarkets} markets
+              of {totalMarkets.toLocaleString()} markets
             </>
+          ) : isLoading ? (
+            "Loading…"
           ) : (
-            isLoading ? "Loading…" : "No markets found"
+            "No markets found"
           )}
-        </span>
-        <span className="flex items-center gap-2">
-          {isValidating && !isLoading && (
-            <span className="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+        </p>
+
+        <div className="flex items-center gap-3">
+          {/* Refresh feedback */}
+          {refreshMsg && (
+            <p className="text-xs text-muted-foreground">{refreshMsg}</p>
           )}
-          {lastUpdatedText && (
-            <span>
-              {data?.fromCache ? "Cached" : "Live"} · Updated {lastUpdatedText}
-            </span>
+
+          {/* Cache staleness indicator */}
+          {cachedAtText && !isRefreshing && (
+            <p className="text-xs text-muted-foreground hidden sm:block">
+              {data?.fromCache ? "Cached" : "Live"} · {cachedAtText}
+              {isValidating && (
+                <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              )}
+            </p>
           )}
-        </span>
+
+          {/* Manual refresh button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="gap-1.5 h-7 text-xs"
+          >
+            <RefreshCw className={`w-3 h-3 ${isRefreshing ? "animate-spin" : ""}`} />
+            {isRefreshing ? "Fetching…" : "Refresh data"}
+          </Button>
+        </div>
       </div>
 
       {/* Error state */}
       {error && (
-        <div className="p-4 rounded-lg bg-red-950/50 border border-red-800 text-red-400 text-sm">
-          Failed to load markets. Retrying automatically…
+        <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-sm">
+          Failed to load markets. Try refreshing manually.
         </div>
       )}
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-xl border border-gray-800">
-        <table className="w-full min-w-[640px] text-left">
-          <thead>
-            <tr className="border-b border-gray-800 bg-gray-900/60">
-              <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-10">
-                #
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Market
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-right whitespace-nowrap">
-                Yes Price
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-right whitespace-nowrap">
-                24h Move
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-right whitespace-nowrap">
-                24h Volume
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">
-                Liquidity
-              </th>
-              <th className="px-4 py-3 w-16" />
-            </tr>
-          </thead>
-          <tbody>
+      <div className="rounded-xl border border-border overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-10 text-xs">#</TableHead>
+              <TableHead className="text-xs">Market</TableHead>
+              <TableHead className="text-xs text-right whitespace-nowrap">Yes Price</TableHead>
+              <TableHead className="text-xs text-right whitespace-nowrap">24h Move</TableHead>
+              <TableHead className="text-xs text-right whitespace-nowrap">24h Volume</TableHead>
+              <TableHead className="text-xs text-right">Liquidity</TableHead>
+              <TableHead className="w-16" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {isLoading &&
               Array.from({ length: 10 }).map((_, i) => (
-                <tr key={i} className="border-b border-gray-800/60">
+                <TableRow key={i}>
                   {Array.from({ length: 7 }).map((_, j) => (
-                    <td key={j} className="px-4 py-3">
-                      <div className="h-4 bg-gray-800 rounded animate-pulse" />
-                    </td>
+                    <TableHead key={j} className="py-3">
+                      <div className="h-4 bg-muted rounded animate-pulse" />
+                    </TableHead>
                   ))}
-                </tr>
+                </TableRow>
               ))}
+
             {!isLoading &&
               markets.map((market, idx) => (
                 <MarketRow
@@ -149,37 +196,39 @@ export default function MarketTable({
                   rank={offset + idx + 1}
                 />
               ))}
+
             {!isLoading && markets.length === 0 && !error && (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-10 text-center text-gray-500 text-sm"
-                >
+              <TableRow>
+                <TableHead colSpan={7} className="py-12 text-center text-muted-foreground text-sm font-normal">
                   No markets found for this filter.
-                </td>
-              </tr>
+                </TableHead>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {/* Pagination */}
       {(hasPrev || hasMore) && (
-        <div className="flex items-center justify-between pt-2">
-          <button
+        <div className="flex items-center justify-between pt-1">
+          <Button
+            variant="ghost"
+            size="sm"
             disabled={!hasPrev}
             onClick={() => setOffset(Math.max(0, offset - PAGE_LIMIT))}
-            className="px-4 py-2 text-sm rounded-lg bg-gray-800 text-gray-300 disabled:opacity-40 hover:bg-gray-700 transition-colors"
+            className="gap-1"
           >
-            Previous
-          </button>
-          <button
+            <ChevronLeft className="w-4 h-4" /> Previous
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             disabled={!hasMore}
             onClick={() => setOffset(offset + PAGE_LIMIT)}
-            className="px-4 py-2 text-sm rounded-lg bg-gray-800 text-gray-300 disabled:opacity-40 hover:bg-gray-700 transition-colors"
+            className="gap-1"
           >
-            Next
-          </button>
+            Next <ChevronRight className="w-4 h-4" />
+          </Button>
         </div>
       )}
     </div>

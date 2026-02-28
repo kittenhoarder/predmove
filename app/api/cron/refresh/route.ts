@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { refreshMarketCache } from "@/lib/get-markets";
 
 /**
- * POST /api/cron/refresh
+ * POST /api/cron/refresh — called by Vercel Cron (daily at 06:00 UTC).
+ * GET  /api/cron/refresh — called by the frontend manual refresh button.
  *
- * Called by Vercel Cron every 15 minutes (see vercel.json).
- * Protected by CRON_SECRET to prevent unauthorised cache invalidation.
+ * Both are protected by CRON_SECRET in the Authorization header.
  */
-export async function POST(req: NextRequest) {
+
+async function handleRefresh(req: NextRequest): Promise<NextResponse> {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -25,3 +26,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export const POST = handleRefresh;
+export const GET = handleRefresh;

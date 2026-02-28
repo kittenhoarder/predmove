@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import type { SortMode } from "@/lib/types";
 
 interface Tab {
@@ -8,12 +9,12 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { id: "movers", label: "Biggest Movers" },
-  { id: "gainers", label: "Top Gainers" },
-  { id: "losers", label: "Top Losers" },
+  { id: "movers",    label: "Biggest Movers" },
+  { id: "gainers",   label: "Top Gainers" },
+  { id: "losers",    label: "Top Losers" },
   { id: "liquidity", label: "Most Liquid" },
-  { id: "volume", label: "Highest Volume" },
-  { id: "new", label: "New Markets" },
+  { id: "volume",    label: "Highest Volume" },
+  { id: "new",       label: "New Markets" },
 ];
 
 interface SortTabsProps {
@@ -26,22 +27,20 @@ export default function SortTabs({ active, onChange }: SortTabsProps) {
     <div
       role="tablist"
       aria-label="Sort markets by"
-      className="flex flex-wrap gap-2"
+      className="flex flex-wrap gap-1.5"
     >
       {TABS.map((tab) => (
-        <button
+        <Button
           key={tab.id}
           role="tab"
           aria-selected={active === tab.id}
+          variant={active === tab.id ? "default" : "secondary"}
+          size="sm"
           onClick={() => onChange(tab.id)}
-          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
-            active === tab.id
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40"
-              : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
-          }`}
+          className="rounded-full"
         >
           {tab.label}
-        </button>
+        </Button>
       ))}
     </div>
   );

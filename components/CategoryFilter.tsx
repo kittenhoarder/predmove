@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+
 const CATEGORIES = [
   "All",
   "Politics",
@@ -16,28 +18,26 @@ interface CategoryFilterProps {
   onChange: (category: string) => void;
 }
 
-export default function CategoryFilter({
-  active,
-  onChange,
-}: CategoryFilterProps) {
+export default function CategoryFilter({ active, onChange }: CategoryFilterProps) {
   return (
-    <div className="flex flex-wrap gap-2" aria-label="Filter by category">
+    <div className="flex flex-wrap gap-1.5" aria-label="Filter by category">
       {CATEGORIES.map((cat) => {
         const value = cat === "All" ? "all" : cat;
-        const isActive =
-          active === value || (active === "all" && cat === "All");
+        const isActive = active === value;
         return (
-          <button
+          <Button
             key={cat}
+            variant={isActive ? "outline" : "ghost"}
+            size="sm"
             onClick={() => onChange(value)}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+            className={`rounded-full text-xs h-7 ${
               isActive
-                ? "bg-gray-600 text-white"
-                : "bg-gray-800/60 text-gray-400 border border-gray-700 hover:border-gray-500 hover:text-gray-200"
+                ? "border-primary text-primary"
+                : "text-muted-foreground"
             }`}
           >
             {cat}
-          </button>
+          </Button>
         );
       })}
     </div>
