@@ -6,15 +6,16 @@ import type { SortMode } from "@/lib/types";
 interface Tab {
   id: SortMode;
   label: string;
+  shortLabel: string;
 }
 
 const TABS: Tab[] = [
-  { id: "movers",    label: "Biggest Movers" },
-  { id: "gainers",   label: "Top Gainers" },
-  { id: "losers",    label: "Top Losers" },
-  { id: "liquidity", label: "Most Liquid" },
-  { id: "volume",    label: "Highest Volume" },
-  { id: "new",       label: "New Markets" },
+  { id: "movers",    label: "Biggest Movers",  shortLabel: "Movers" },
+  { id: "gainers",   label: "Top Gainers",     shortLabel: "Gainers" },
+  { id: "losers",    label: "Top Losers",      shortLabel: "Losers" },
+  { id: "liquidity", label: "Most Liquid",     shortLabel: "Liquid" },
+  { id: "volume",    label: "Highest Volume",  shortLabel: "Volume" },
+  { id: "new",       label: "New Markets",     shortLabel: "New" },
 ];
 
 interface SortTabsProps {
@@ -27,7 +28,7 @@ export default function SortTabs({ active, onChange }: SortTabsProps) {
     <div
       role="tablist"
       aria-label="Sort markets by"
-      className="flex flex-wrap gap-1.5"
+      className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none sm:flex-wrap"
     >
       {TABS.map((tab) => (
         <Button
@@ -37,9 +38,10 @@ export default function SortTabs({ active, onChange }: SortTabsProps) {
           variant={active === tab.id ? "default" : "secondary"}
           size="sm"
           onClick={() => onChange(tab.id)}
-          className="rounded-full"
+          className="rounded-full shrink-0"
         >
-          {tab.label}
+          <span className="sm:hidden">{tab.shortLabel}</span>
+          <span className="hidden sm:inline">{tab.label}</span>
         </Button>
       ))}
     </div>

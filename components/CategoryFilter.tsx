@@ -20,7 +20,7 @@ interface CategoryFilterProps {
 
 export default function CategoryFilter({ active, onChange }: CategoryFilterProps) {
   return (
-    <div className="flex flex-wrap gap-1.5" aria-label="Filter by category">
+    <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none sm:flex-wrap" aria-label="Filter by category">
       {CATEGORIES.map((cat) => {
         const value = cat === "All" ? "all" : cat;
         const isActive = active === value;
@@ -30,7 +30,7 @@ export default function CategoryFilter({ active, onChange }: CategoryFilterProps
             variant={isActive ? "outline" : "ghost"}
             size="sm"
             onClick={() => onChange(value)}
-            className={`rounded-full text-xs h-7 ${
+            className={`rounded-full text-xs h-7 shrink-0 ${
               isActive
                 ? "border-primary text-primary"
                 : "text-muted-foreground"
