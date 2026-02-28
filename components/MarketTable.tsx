@@ -132,16 +132,26 @@ export default function MarketTable({
 
       {/* Table */}
       <div className="rounded-xl border border-border overflow-hidden">
-        <Table>
+        {/* table-fixed prevents columns reflowing when expansion rows are inserted */}
+        <Table className="table-fixed">
+          <colgroup>
+            <col className="w-10" />          {/* # */}
+            <col />                            {/* Market — flex remainder */}
+            <col className="w-24" />           {/* Probability */}
+            <col className="w-24" />           {/* 24h Change */}
+            <col className="w-24" />           {/* 24h Volume */}
+            <col className="w-24" />           {/* Liquidity */}
+            <col className="w-16" />           {/* Trade */}
+          </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-10 text-xs">#</TableHead>
+              <TableHead className="text-xs">#</TableHead>
               <TableHead className="text-xs">Market</TableHead>
               <TableHead className="text-xs text-right whitespace-nowrap">Probability</TableHead>
               <TableHead className="text-xs text-right whitespace-nowrap">24h Change</TableHead>
               <TableHead className="text-xs text-right whitespace-nowrap">24h Volume</TableHead>
               <TableHead className="text-xs text-right">Liquidity</TableHead>
-              <TableHead className="w-16" />
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>

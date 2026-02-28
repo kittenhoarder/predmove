@@ -116,10 +116,10 @@ export default function MarketRow({ market, rank }: MarketRowProps) {
         </TableCell>
       </TableRow>
 
-      {/* Expansion row */}
+      {/* Expansion row — colSpan covers all 7 fixed columns; no padding so panel fills edge-to-edge */}
       {expanded && (
-        <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={7} className="p-0 border-b border-border">
+        <TableRow className="hover:bg-transparent border-0">
+          <TableCell colSpan={7} className="p-0">
             <ExpandedPanel market={market} />
           </TableCell>
         </TableRow>

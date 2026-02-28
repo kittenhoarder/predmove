@@ -29,17 +29,17 @@ interface ChartPoint {
 }
 
 async function fetchPriceHistory(tokenId: string): Promise<ChartPoint[]> {
-  const endTs = Math.floor(Date.now() / 1000);
-  const startTs = endTs - 30 * 24 * 60 * 60; // 30 days back
+  // interval=max avoids the strict startTs/endTs range limit; fidelity=10 gives ~300 points
   const url =
     `https://clob.polymarket.com/prices-history` +
-    `?market=${tokenId}&startTs=${startTs}&endTs=${endTs}&fidelity=60`;
+    `?market=${tokenId}&interval=max&fidelity=10`;
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`CLOB ${res.status}`);
-  const data: { history: PricePoint[] } = await res.json();
+  const json: { history?: PricePoint[]; error?: string } = await res.json();
+  if (json.error) throw new Error(json.error);
 
-  return (data.history ?? []).map((pt) => ({
+  return (json.history ?? []).map((pt) => ({
     date: format(new Date(pt.t * 1000), "MMM d"),
     prob: Math.round(pt.p * 10000) / 100,
   }));
@@ -219,7 +219,7 @@ export default function ExpandedPanel({ market }: ExpandedPanelProps) {
       {market.clobTokenId && (
         <div>
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
-            30-day probability
+            Probability history
           </p>
           {!chartData && !chartError && (
             <div className="h-28 w-full rounded-md bg-muted animate-pulse" />
