@@ -5,12 +5,12 @@ import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import type { PulseIndex } from "@/lib/types";
 import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 
-const BAND_COLORS: Record<PulseIndex["band"], { text: string; bar: string; hex: string }> = {
-  "Extreme Bearish": { text: "text-red-500",    bar: "bg-red-500",     hex: "#ef4444" },
-  "Bearish":         { text: "text-orange-400", bar: "bg-orange-400",  hex: "#fb923c" },
-  "Neutral":         { text: "text-zinc-400",   bar: "bg-zinc-400",    hex: "#71717a" },
-  "Bullish":         { text: "text-teal-400",   bar: "bg-teal-400",    hex: "#2dd4bf" },
-  "Extreme Bullish": { text: "text-emerald-400",bar: "bg-emerald-400", hex: "#34d399" },
+const BAND_COLORS: Record<PulseIndex["band"], { text: string; hex: string }> = {
+  "Extreme Bearish": { text: "text-red-500",    hex: "#ef4444" },
+  "Bearish":         { text: "text-red-400",    hex: "#f87171" },
+  "Neutral":         { text: "text-zinc-400",   hex: "#71717a" },
+  "Bullish":         { text: "text-teal-400",   hex: "#2dd4bf" },
+  "Extreme Bullish": { text: "text-emerald-400",hex: "#34d399" },
 };
 
 interface PulseCardProps {
@@ -61,13 +61,28 @@ export default function PulseCard({ index, large = false }: PulseCardProps) {
         )}
       </div>
 
-      {/* Score bar */}
-      <div className="h-1.5 w-full bg-muted/30 rounded-full overflow-hidden mb-3">
-        <div
-          className={`h-full rounded-full transition-all ${colors.bar}`}
-          style={{ width: `${index.score}%` }}
-        />
-      </div>
+      {/* Center-origin score bar: grows left (bearish) or right (bullish) from the midpoint */}
+      {(() => {
+        const isBullish = index.score >= 50;
+        const pct = (Math.abs(index.score - 50) / 50) * 100;
+        return (
+          <div className="relative h-1.5 w-full bg-muted/30 rounded-full overflow-hidden mb-3">
+            {isBullish ? (
+              <div
+                className="absolute top-0 h-full rounded-r-full"
+                style={{ left: "50%", width: `${pct / 2}%`, backgroundColor: colors.hex }}
+              />
+            ) : (
+              <div
+                className="absolute top-0 h-full rounded-l-full"
+                style={{ right: "50%", width: `${pct / 2}%`, backgroundColor: colors.hex }}
+              />
+            )}
+            {/* Center tick */}
+            <div className="absolute left-1/2 top-0 h-full w-px bg-border/50 -translate-x-px" />
+          </div>
+        );
+      })()}
 
       {/* Sparkline */}
       {sparkData.length > 1 && (
@@ -108,6 +123,12 @@ export default function PulseCard({ index, large = false }: PulseCardProps) {
             <span className="inline-flex items-center gap-0.5">
               <span className="inline-block w-1 h-1 rounded-full bg-sky-400" />
               {index.marketCount.kalshi}K
+            </span>
+          )}
+          {index.marketCount.manifold > 0 && (
+            <span className="inline-flex items-center gap-0.5">
+              <span className="inline-block w-1 h-1 rounded-full bg-violet-400" />
+              {index.marketCount.manifold}M
             </span>
           )}
         </span>
@@ -159,19 +180,25 @@ export default function PulseCard({ index, large = false }: PulseCardProps) {
                   <div key={m.id} className="flex items-center gap-1.5 min-w-0">
                     <span
                       className={`inline-flex shrink-0 items-center justify-center w-3.5 h-3.5 rounded-sm text-[8px] font-bold ${
-                        m.source === "kalshi" ? "bg-sky-500/20 text-sky-400" : "bg-indigo-500/20 text-indigo-400"
+                        m.source === "kalshi"
+                          ? "bg-sky-500/20 text-sky-400"
+                          : m.source === "manifold"
+                            ? "bg-violet-500/20 text-violet-400"
+                            : "bg-indigo-500/20 text-indigo-400"
                       }`}
                     >
-                      {m.source === "kalshi" ? "K" : "P"}
+                      {m.source === "kalshi" ? "K" : m.source === "manifold" ? "M" : "P"}
                     </span>
                     <span className="text-[11px] text-foreground/80 truncate flex-1 min-w-0">{m.question}</span>
                     <span className="text-[11px] tabular-nums font-semibold shrink-0">
                       {m.currentPrice.toFixed(1)}%
                     </span>
                     <a
-                      href={m.source === "polymarket"
-                        ? `https://polymarket.com/event/${m.id}`
-                        : `https://kalshi.com/markets/${m.id}`}
+                      href={m.source === "kalshi"
+                        ? `https://kalshi.com/markets/${m.id}`
+                        : m.source === "manifold"
+                          ? `https://manifold.markets/${m.id}`
+                          : `https://polymarket.com/event/${m.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-muted-foreground/30 hover:text-muted-foreground transition-colors shrink-0"

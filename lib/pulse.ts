@@ -61,6 +61,7 @@ function computeCategoryPulse(
   const now = Date.now();
   const polyMarkets = markets.filter((m) => m.source === "polymarket");
   const kalshiMarkets = markets.filter((m) => m.source === "kalshi");
+  const manifoldMarkets = markets.filter((m) => m.source === "manifold");
 
   // --- S_prob: open-interest-weighted average probability ---
   let sumOI = 0;
@@ -114,16 +115,29 @@ function computeCategoryPulse(
   }
   const S_decay = sumDecay > 0 ? clamp((sumDecayProb / sumDecay) * 100, 0, 100) : S_prob;
 
-  // --- S_consensus: penalize cross-platform disagreement ---
-  let S_consensus = 100; // default to max (no penalty) when only one source
-  if (polyMarkets.length > 0 && kalshiMarkets.length > 0) {
-    const polyAvg =
-      polyMarkets.reduce((acc, m) => acc + m.currentPrice, 0) / polyMarkets.length;
-    const kalshiAvg =
-      kalshiMarkets.reduce((acc, m) => acc + m.currentPrice, 0) / kalshiMarkets.length;
-    const gap = Math.abs(polyAvg - kalshiAvg);
-    // gap in pp; every 1pp of disagreement costs 5 consensus points
-    S_consensus = clamp(100 - gap * 5, 0, 100);
+  // --- S_consensus: penalize cross-platform disagreement (avg gap across all source pairs) ---
+  let S_consensus = 100;
+  const sourceAvgs: number[] = [];
+  if (polyMarkets.length > 0) {
+    sourceAvgs.push(polyMarkets.reduce((acc, m) => acc + m.currentPrice, 0) / polyMarkets.length);
+  }
+  if (kalshiMarkets.length > 0) {
+    sourceAvgs.push(kalshiMarkets.reduce((acc, m) => acc + m.currentPrice, 0) / kalshiMarkets.length);
+  }
+  if (manifoldMarkets.length > 0) {
+    sourceAvgs.push(manifoldMarkets.reduce((acc, m) => acc + m.currentPrice, 0) / manifoldMarkets.length);
+  }
+  if (sourceAvgs.length >= 2) {
+    let totalGap = 0;
+    let pairs = 0;
+    for (let i = 0; i < sourceAvgs.length; i++) {
+      for (let j = i + 1; j < sourceAvgs.length; j++) {
+        totalGap += Math.abs(sourceAvgs[i] - sourceAvgs[j]);
+        pairs++;
+      }
+    }
+    const avgGap = pairs > 0 ? totalGap / pairs : 0;
+    S_consensus = clamp(100 - avgGap * 5, 0, 100);
   }
 
   const score = Math.round(
@@ -162,6 +176,7 @@ function computeCategoryPulse(
     marketCount: {
       polymarket: polyMarkets.length,
       kalshi: kalshiMarkets.length,
+      manifold: manifoldMarkets.length,
       total: markets.length,
     },
     topMarkets,

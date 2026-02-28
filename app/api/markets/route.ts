@@ -11,7 +11,12 @@ export async function GET(req: NextRequest) {
   const watchlistParam = searchParams.get("watchlist") ?? "";
   const watchlistIds = watchlistParam ? watchlistParam.split(",").filter(Boolean) : [];
 
-  const data = await getMarkets({ sort, category, offset, watchlistIds });
+  const sourceParam = searchParams.get("source") ?? "all";
+  const source = (["polymarket", "kalshi", "manifold", "all"].includes(sourceParam)
+    ? sourceParam
+    : "all") as "polymarket" | "kalshi" | "manifold" | "all";
+
+  const data = await getMarkets({ sort, category, offset, watchlistIds, source });
 
   return NextResponse.json(data, {
     headers: {

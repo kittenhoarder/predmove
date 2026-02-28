@@ -151,6 +151,7 @@ export default function ExpandedPanel({ market }: ExpandedPanelProps) {
   const [descExpanded, setDescExpanded] = useState(false);
   const [trades, setTrades] = useState<RecentTrade[] | null>(null);
   const [tradesError, setTradesError] = useState(false);
+  const [showAllTrades, setShowAllTrades] = useState(false);
 
   // Lazy-fetch price history once on first render of the expansion
   useEffect(() => {
@@ -163,7 +164,11 @@ export default function ExpandedPanel({ market }: ExpandedPanelProps) {
       .catch(() => setTradesError(true));
   }, [market.clobTokenId]);
 
-  const polymarketUrl = `https://polymarket.com/event/${market.eventSlug}`;
+  const externalUrl = market.source === "kalshi"
+    ? `https://kalshi.com/markets/${market.eventSlug}`
+    : market.source === "manifold"
+      ? market.eventSlug
+      : `https://polymarket.com/event/${market.eventSlug}`;
 
   const closesIn =
     market.endDate
@@ -222,13 +227,14 @@ export default function ExpandedPanel({ market }: ExpandedPanelProps) {
           </div>
         </div>
         <a
-          href={polymarketUrl}
+          href={externalUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors shrink-0"
           onClick={(e) => e.stopPropagation()}
         >
-          Polymarket <ExternalLink className="w-3 h-3" />
+          {market.source === "kalshi" ? "Kalshi" : market.source === "manifold" ? "Manifold" : "Polymarket"}{" "}
+          <ExternalLink className="w-3 h-3" />
         </a>
       </div>
 
@@ -260,8 +266,8 @@ export default function ExpandedPanel({ market }: ExpandedPanelProps) {
         <StatCell label="Vol 7d" value={formatCurrency(market.volume1wk)} />
       </div>
 
-      {/* Section C — 30-day probability sparkline */}
-      {market.clobTokenId && (
+      {/* Section C — 30-day probability sparkline (Polymarket CLOB only) */}
+      {market.source === "polymarket" && market.clobTokenId && (
         <div>
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
             Probability history
@@ -321,8 +327,8 @@ export default function ExpandedPanel({ market }: ExpandedPanelProps) {
         </div>
       )}
 
-      {/* Section D — Recent trades (why did it move?) */}
-      {market.clobTokenId && (
+      {/* Section D — Recent trades (Polymarket CLOB only) */}
+      {market.source === "polymarket" && market.clobTokenId && (
         <div>
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
             Recent activity
@@ -342,7 +348,7 @@ export default function ExpandedPanel({ market }: ExpandedPanelProps) {
           )}
           {trades && trades.length > 0 && (
             <div className="flex flex-col gap-1">
-              {trades.map((trade) => {
+              {(showAllTrades ? trades : trades.slice(0, 5)).map((trade) => {
                 const isBuy = trade.side === "BUY";
                 return (
                   <div
@@ -375,6 +381,14 @@ export default function ExpandedPanel({ market }: ExpandedPanelProps) {
                   </div>
                 );
               })}
+              {trades.length > 5 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowAllTrades((v) => !v); }}
+                  className="text-xs text-primary hover:text-primary/80 transition-colors mt-1 text-left"
+                >
+                  {showAllTrades ? "Show less" : `+${trades.length - 5} more`}
+                </button>
+              )}
             </div>
           )}
         </div>
