@@ -1,5 +1,7 @@
 import { fetchAllActiveEvents, fetchTags } from "./gamma";
 import { buildTagMap, processEvents } from "./process-markets";
+import { fetchAllKalshiMarkets } from "./kalshi";
+import { processKalshiMarkets } from "./process-kalshi";
 import type { ProcessedMarket, SortMode, MarketsApiResponse } from "./types";
 
 const PAGE_LIMIT = 100;
@@ -65,11 +67,15 @@ export interface GetMarketsOptions {
   offset?: number;
   /** Comma-separated market IDs for the watchlist sort mode */
   watchlistIds?: string[];
+  /** When set, only return markets from this source */
+  source?: "polymarket" | "kalshi" | "all";
 }
 
 /**
- * Fetch all active markets from the Gamma API, process, sort, filter, and
- * return a paginated response. No caching — every call hits Gamma directly.
+ * Fetch all active markets from Polymarket and Kalshi in parallel, merge,
+ * sort, filter, and return a paginated response.
+ * Kalshi failures are non-fatal: if the Kalshi API is down, the merge
+ * continues with Polymarket data only.
  */
 export async function getMarkets(
   opts: GetMarketsOptions = {}
@@ -78,19 +84,36 @@ export async function getMarkets(
   const category = opts.category ?? "all";
   const offset = opts.offset ?? 0;
   const watchlistIds = opts.watchlistIds ?? [];
+  const source = opts.source ?? "all";
   const fetchedAt = new Date().toISOString();
 
-  let markets: ProcessedMarket[] = [];
-  try {
-    const [events, tags] = await Promise.all([
-      fetchAllActiveEvents(),
-      fetchTags(),
-    ]);
-    const tagMap = buildTagMap(tags);
-    markets = processEvents(events, tagMap);
-  } catch (err) {
-    console.error("[get-markets] Gamma API fetch failed:", err);
-  }
+  // Fetch both sources in parallel; each catches its own errors
+  const [polymarkets, kalshiMarkets] = await Promise.all([
+    (async (): Promise<ProcessedMarket[]> => {
+      try {
+        const [events, tags] = await Promise.all([fetchAllActiveEvents(), fetchTags()]);
+        const tagMap = buildTagMap(tags);
+        return processEvents(events, tagMap);
+      } catch (err) {
+        console.error("[get-markets] Polymarket fetch failed:", err);
+        return [];
+      }
+    })(),
+    (async (): Promise<ProcessedMarket[]> => {
+      try {
+        const raw = await fetchAllKalshiMarkets();
+        return processKalshiMarkets(raw);
+      } catch (err) {
+        console.error("[get-markets] Kalshi fetch failed:", err);
+        return [];
+      }
+    })(),
+  ]);
+
+  // Merge, optionally filter by source
+  let markets: ProcessedMarket[] = [...polymarkets, ...kalshiMarkets];
+  if (source === "polymarket") markets = polymarkets;
+  else if (source === "kalshi") markets = kalshiMarkets;
 
   const filtered = filterByCategory(markets, category);
   const sorted = sortMarkets(filtered, sort, watchlistIds);
@@ -102,4 +125,33 @@ export async function getMarkets(
     totalMarkets: filtered.length,
     fromCache: false,
   };
+}
+
+/**
+ * Fetch all active markets from both sources without pagination.
+ * Used internally by the Pulse engine which needs the full corpus.
+ */
+export async function getAllMarkets(): Promise<ProcessedMarket[]> {
+  const [polymarkets, kalshiMarkets] = await Promise.all([
+    (async (): Promise<ProcessedMarket[]> => {
+      try {
+        const [events, tags] = await Promise.all([fetchAllActiveEvents(), fetchTags()]);
+        const tagMap = buildTagMap(tags);
+        return processEvents(events, tagMap);
+      } catch (err) {
+        console.error("[get-markets] Polymarket fetch failed (pulse):", err);
+        return [];
+      }
+    })(),
+    (async (): Promise<ProcessedMarket[]> => {
+      try {
+        const raw = await fetchAllKalshiMarkets();
+        return processKalshiMarkets(raw);
+      } catch (err) {
+        console.error("[get-markets] Kalshi fetch failed (pulse):", err);
+        return [];
+      }
+    })(),
+  ]);
+  return [...polymarkets, ...kalshiMarkets];
 }

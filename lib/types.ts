@@ -1,3 +1,35 @@
+// Raw market object returned by the Kalshi Trade API v2 /markets endpoint
+export interface KalshiMarket {
+  ticker: string;
+  event_ticker: string;
+  market_type: "binary" | "scalar";
+  title: string;
+  subtitle?: string;
+  yes_sub_title?: string;
+  no_sub_title?: string;
+  status: "initialized" | "inactive" | "active" | "closed" | "determined" | "disputed" | "amended" | "finalized";
+  yes_bid_dollars: string;   // e.g. "0.5400"
+  yes_ask_dollars: string;   // e.g. "0.5600"
+  last_price_dollars: string; // e.g. "0.5500"
+  volume_24h_fp: string;     // 24h volume as FixedPoint string
+  volume_fp: string;         // lifetime volume as FixedPoint string
+  open_interest_fp: string;  // open contracts as FixedPoint string
+  open_time?: string;        // ISO timestamp
+  close_time?: string;       // ISO timestamp
+  result?: string;
+  // Series category — populated after series lookup
+  category?: string;
+  series_ticker?: string;
+}
+
+// Raw series object from Kalshi /series endpoint
+export interface KalshiSeries {
+  ticker: string;
+  title: string;
+  category: string;
+  frequency?: string;
+}
+
 // Raw market object returned by the Polymarket Gamma API /events endpoint
 export interface GammaMarket {
   id: string;
@@ -77,6 +109,8 @@ export interface GammaSeries {
 export interface ProcessedMarket {
   id: string;
   question: string;
+  // Data source — drives source badge in the UI
+  source: "polymarket" | "kalshi";
   // Event-level slug used to build: https://polymarket.com/event/{eventSlug}
   eventSlug: string;
   // Event-level title (e.g. "MicroStrategy Bitcoin 2025")
@@ -120,6 +154,50 @@ export interface LivePrice {
   // Yes outcome probability as percentage 0–100 (best ask * 100)
   price: number;
   flash: "up" | "down" | null;
+}
+
+// A single hourly snapshot of a category's Pulse score (for sparkline history)
+export interface PulseSnapshot {
+  // ISO timestamp of when this snapshot was taken
+  timestamp: string;
+  score: number;
+}
+
+// Predmove Pulse Index entry for a single category
+export interface PulseIndex {
+  // e.g. "politics", "crypto", "economics"
+  category: string;
+  // Human-readable label, e.g. "Politics"
+  label: string;
+  // Composite score 0–100
+  score: number;
+  // Semantic band label
+  band: "Extreme Bearish" | "Bearish" | "Neutral" | "Bullish" | "Extreme Bullish";
+  // Change in score vs. 24h ago (pp)
+  delta24h: number;
+  // Component signal scores (each 0–100) for transparency display
+  signals: {
+    prob: number;
+    momentum: number;
+    breadth: number;
+    volWeighted: number;
+    decay: number;
+    consensus: number;
+  };
+  // Number of constituent markets by source
+  marketCount: { polymarket: number; kalshi: number; total: number };
+  // Top 5 constituent market IDs + questions + scores for card expansion
+  topMarkets: Array<{ id: string; question: string; currentPrice: number; source: "polymarket" | "kalshi" }>;
+  // Up to 48 hourly snapshots (oldest first) for sparkline
+  history: PulseSnapshot[];
+  // ISO timestamp of computation
+  computedAt: string;
+}
+
+// Shape returned by GET /api/pulse
+export interface PulseApiResponse {
+  indices: PulseIndex[];
+  computedAt: string;
 }
 
 // Shape returned by GET /api/markets

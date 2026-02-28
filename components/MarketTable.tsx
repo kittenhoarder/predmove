@@ -82,14 +82,20 @@ export default function MarketTable({
 
   const markets = data?.markets ?? [];
 
-  // Derive stable token ID list for WebSocket subscription
+  // Derive stable token ID lists for WebSocket subscriptions per source
   const tokenIds = useMemo(
-    () => markets.map((m) => m.clobTokenId).filter(Boolean),
+    () => markets.filter((m) => m.source !== "kalshi").map((m) => m.clobTokenId).filter(Boolean),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [markets.map((m) => m.clobTokenId).join(",")]
+    [markets.filter((m) => m.source !== "kalshi").map((m) => m.clobTokenId).join(",")]
   );
 
-  const { livePrices, status: wsStatus } = useMarketSocket(tokenIds);
+  const kalshiTickers = useMemo(
+    () => markets.filter((m) => m.source === "kalshi").map((m) => m.id).filter(Boolean),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [markets.filter((m) => m.source === "kalshi").map((m) => m.id).join(",")]
+  );
+
+  const { livePrices, status: wsStatus } = useMarketSocket(tokenIds, kalshiTickers);
 
   const handleSortChange = useCallback((newSort: SortMode) => {
     setSort(newSort);
@@ -264,7 +270,9 @@ export default function MarketTable({
                   market={market}
                   rank={offset + idx + 1}
                   onWatchlistChange={refreshWatchlist}
-                  livePrice={livePrices.get(market.clobTokenId)}
+                  livePrice={livePrices.get(
+                    market.source === "kalshi" ? market.id : market.clobTokenId
+                  )}
                 />
               ))}
 

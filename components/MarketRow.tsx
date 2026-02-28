@@ -51,7 +51,9 @@ export default function MarketRow({ market, rank, onWatchlistChange, livePrice }
 
   const isPositive = market.oneDayChange > 0;
   const isNeutral = market.oneDayChange === 0;
-  const polymarketUrl = `https://polymarket.com/event/${market.eventSlug}`;
+  const tradeUrl = market.source === "kalshi"
+    ? `https://kalshi.com/markets/${market.eventSlug}`
+    : `https://polymarket.com/event/${market.eventSlug}`;
 
   function handleStar(e: React.MouseEvent) {
     e.stopPropagation();
@@ -78,7 +80,7 @@ export default function MarketRow({ market, rank, onWatchlistChange, livePrice }
           </span>
         </TableCell>
 
-        {/* Market question + category badges */}
+        {/* Market question + category badges + source badge */}
         <TableCell>
           <span
             className="text-sm font-medium leading-snug line-clamp-2 block"
@@ -87,6 +89,17 @@ export default function MarketRow({ market, rank, onWatchlistChange, livePrice }
             {market.question}
           </span>
           <div className="flex flex-wrap gap-1 mt-1">
+            {/* Source badge */}
+            <Badge
+              variant="outline"
+              className={`text-[9px] px-1 py-0 rounded font-semibold tracking-wide ${
+                market.source === "kalshi"
+                  ? "border-sky-500/40 text-sky-400 bg-sky-500/10"
+                  : "border-indigo-500/40 text-indigo-400 bg-indigo-500/10"
+              }`}
+            >
+              {market.source === "kalshi" ? "K" : "P"}
+            </Badge>
             {market.categories.slice(0, 2).map((cat) => (
               <Badge
                 key={cat}
@@ -154,19 +167,21 @@ export default function MarketRow({ market, rank, onWatchlistChange, livePrice }
             >
               <Star className={`w-3.5 h-3.5 ${starred ? "fill-amber-400" : ""}`} />
             </button>
+            {market.source !== "kalshi" && (
+              <a
+                href={`/market/${market.eventSlug}`}
+                aria-label={`Detail page for ${market.question}`}
+                className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Link className="w-3 h-3" />
+              </a>
+            )}
             <a
-              href={`/market/${market.eventSlug}`}
-              aria-label={`Detail page for ${market.question}`}
-              className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Link className="w-3 h-3" />
-            </a>
-            <a
-              href={polymarketUrl}
+              href={tradeUrl}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`Open ${market.question} on Polymarket`}
+              aria-label={`Open ${market.question} on ${market.source === "kalshi" ? "Kalshi" : "Polymarket"}`}
               className="inline-flex items-center gap-1 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <ExternalLink className="w-3 h-3" />
