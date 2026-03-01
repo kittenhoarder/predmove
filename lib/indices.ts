@@ -3,6 +3,7 @@ import type {
   IndexDiagnostics,
   IndexFamily,
   IndexHorizon,
+  IndexScoreProfile,
   IndexSourceScope,
   OperatorIndex,
   ProcessedMarket,
@@ -280,12 +281,30 @@ function normalizeSignalByHistory(
   return Math.round(robustQuantileScore(raw, history, fallbackMin, fallbackMax));
 }
 
+function normalizeSignal(
+  profile: IndexScoreProfile,
+  family: IndexFamily,
+  category: string,
+  sourceScope: IndexSourceScope,
+  horizon: IndexHorizon,
+  signal: string,
+  raw: number,
+  fallbackMin: number,
+  fallbackMax: number,
+): number {
+  if (profile === "core3") {
+    return Math.round(mapRange(raw, fallbackMin, fallbackMax));
+  }
+  return normalizeSignalByHistory(family, category, sourceScope, horizon, signal, raw, fallbackMin, fallbackMax);
+}
+
 function directionalIndex(
   category: string,
   categoryMarkets: ProcessedMarket[],
   sourceScope: IndexSourceScope,
   horizon: IndexHorizon,
   nowIso: string,
+  scoreProfile: IndexScoreProfile,
 ): ComputedIndexInternal | null {
   const { inScope, scoreSet, notes } = splitByScope(categoryMarkets, sourceScope);
   if (scoreSet.length < MIN_MARKETS) return null;
@@ -359,30 +378,42 @@ function directionalIndex(
     );
   }
 
-  const momentum = normalizeSignalByHistory("directional", category, sourceScope, horizon, "momentum", momentumRaw, -20, 20);
-  const flow = normalizeSignalByHistory("directional", category, sourceScope, horizon, "flow", flowRaw, -12, 12);
-  const breadth = normalizeSignalByHistory("directional", category, sourceScope, horizon, "breadth", breadthRaw, -1, 1);
-  const acceleration = normalizeSignalByHistory("directional", category, sourceScope, horizon, "acceleration", accelerationRaw, -5, 5);
-  const orderflow = normalizeSignalByHistory("directional", category, sourceScope, horizon, "orderflow", orderflowRaw, -1, 1);
-  const smartMoney = normalizeSignalByHistory("directional", category, sourceScope, horizon, "smartMoney", smartMoneyRaw, -1, 1);
+  const momentum = normalizeSignal(scoreProfile, "directional", category, sourceScope, horizon, "momentum", momentumRaw, -20, 20);
+  const flow = normalizeSignal(scoreProfile, "directional", category, sourceScope, horizon, "flow", flowRaw, -12, 12);
+  const breadth = normalizeSignal(scoreProfile, "directional", category, sourceScope, horizon, "breadth", breadthRaw, -1, 1);
+  const acceleration = normalizeSignal(scoreProfile, "directional", category, sourceScope, horizon, "acceleration", accelerationRaw, -5, 5);
+  const orderflow = normalizeSignal(scoreProfile, "directional", category, sourceScope, horizon, "orderflow", orderflowRaw, -1, 1);
+  const smartMoney = normalizeSignal(scoreProfile, "directional", category, sourceScope, horizon, "smartMoney", smartMoneyRaw, -1, 1);
 
-  const baseWeights: Record<string, number> = {
-    momentum: 0.30,
-    flow: 0.25,
-    breadth: 0.15,
-    acceleration: 0.15,
-    orderflow: 0.10,
-    smartMoney: 0.05,
-  };
+  const baseWeights: Record<string, number> = scoreProfile === "core3"
+    ? {
+        momentum: 0.45,
+        flow: 0.35,
+        breadth: 0.20,
+      }
+    : {
+        momentum: 0.30,
+        flow: 0.25,
+        breadth: 0.15,
+        acceleration: 0.15,
+        orderflow: 0.10,
+        smartMoney: 0.05,
+      };
 
-  const enabled: Record<string, number> = {
-    momentum,
-    flow,
-    breadth,
-    acceleration,
-    ...(includeOrderflow ? { orderflow } : {}),
-    ...(includeSmart ? { smartMoney } : {}),
-  };
+  const enabled: Record<string, number> = scoreProfile === "core3"
+    ? {
+        momentum,
+        flow,
+        breadth,
+      }
+    : {
+        momentum,
+        flow,
+        breadth,
+        acceleration,
+        ...(includeOrderflow ? { orderflow } : {}),
+        ...(includeSmart ? { smartMoney } : {}),
+      };
 
   const enabledWeight = Object.keys(enabled).reduce((s, k) => s + baseWeights[k], 0);
   const directionalScore = Math.round(
@@ -416,8 +447,9 @@ function directionalIndex(
     featureCoverage: Math.round(featureCoverage * 100),
     includedSignals: Object.keys(enabled),
     excludedSignals: [
-      ...(includeOrderflow ? [] : ["orderflow"]),
-      ...(includeSmart ? [] : ["smartMoney"]),
+      ...(scoreProfile === "core3" ? ["acceleration", "orderflow", "smartMoney"] : []),
+      ...(scoreProfile === "full" && !includeOrderflow ? ["orderflow"] : []),
+      ...(scoreProfile === "full" && !includeSmart ? ["smartMoney"] : []),
     ],
     rawSignals: {
       momentum: momentumRaw,
@@ -454,10 +486,10 @@ function directionalIndex(
       momentum,
       flow,
       breadth,
-      acceleration,
+      ...(scoreProfile === "full" ? { acceleration } : {}),
       level,
-      ...(includeOrderflow ? { orderflow } : {}),
-      ...(includeSmart ? { smartMoney } : {}),
+      ...(scoreProfile === "full" && includeOrderflow ? { orderflow } : {}),
+      ...(scoreProfile === "full" && includeSmart ? { smartMoney } : {}),
     },
     marketCount: sourceCounts(inScope),
     topMarkets: topMarkets(scored),
@@ -709,6 +741,7 @@ export interface ComputeIndicesOptions {
   family?: IndexFamily | "all";
   horizon?: IndexHorizon;
   sourceScope?: IndexSourceScope;
+  scoreProfile?: IndexScoreProfile;
   persist?: boolean;
 }
 
@@ -725,6 +758,7 @@ export function computeIndices(
   const family = opts.family ?? "all";
   const horizon = opts.horizon ?? "24h";
   const sourceScope = opts.sourceScope ?? "core";
+  const scoreProfile = opts.scoreProfile ?? "full";
   const persist = opts.persist ?? true;
 
   const nowIso = new Date().toISOString();
@@ -749,7 +783,7 @@ export function computeIndices(
   for (const [category, catMarkets] of Array.from(byCategory.entries())) {
     for (const fam of families) {
       let idx: ComputedIndexInternal | null = null;
-      if (fam === "directional") idx = directionalIndex(category, catMarkets, sourceScope, horizon, nowIso);
+      if (fam === "directional") idx = directionalIndex(category, catMarkets, sourceScope, horizon, nowIso, scoreProfile);
       if (fam === "liquidity") idx = liquidityIndex(category, catMarkets, sourceScope, horizon, nowIso);
       if (fam === "divergence") idx = divergenceIndex(category, catMarkets, sourceScope, horizon, nowIso);
       if (fam === "certainty") idx = certaintyIndex(category, catMarkets, sourceScope, horizon, nowIso);

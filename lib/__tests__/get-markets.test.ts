@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { filterByCategory, sortMarkets } from "../get-markets";
+import { filterByCategory, getMarkets, pickCoreIndexMarkets, sortMarkets } from "../get-markets";
 import type { ProcessedMarket } from "../types";
 
 function makeMarket(overrides: Partial<ProcessedMarket> = {}): ProcessedMarket {
@@ -123,5 +123,104 @@ describe("sortMarkets", () => {
     const original = [...markets];
     sortMarkets(markets, "volume");
     expect(markets.map((m) => m.id)).toEqual(original.map((m) => m.id));
+  });
+});
+
+describe("getMarkets pagination limits", () => {
+  const polymarkets = Array.from({ length: 40 }, (_, i) =>
+    makeMarket({
+      id: `p-${i}`,
+      source: "polymarket",
+      oneDayChange: 100 - i,
+      categoryslugs: ["politics"],
+      categories: ["Politics"],
+    }),
+  );
+  const kalshiMarkets = Array.from({ length: 40 }, (_, i) =>
+    makeMarket({
+      id: `k-${i}`,
+      source: "kalshi",
+      oneDayChange: 99 - i,
+      categoryslugs: ["politics"],
+      categories: ["Politics"],
+    }),
+  );
+  const manifoldMarkets = Array.from({ length: 40 }, (_, i) =>
+    makeMarket({
+      id: `m-${i}`,
+      source: "manifold",
+      oneDayChange: 98 - i,
+      categoryslugs: ["politics"],
+      categories: ["Politics"],
+    }),
+  );
+
+  const sources = { polymarkets, kalshiMarkets, manifoldMarkets };
+
+  it("supports limit=25", async () => {
+    const res = await getMarkets({ limit: 25, source: "all" }, sources);
+    expect(res.pageSize).toBe(25);
+    expect(res.markets.length).toBeLessThanOrEqual(25);
+    expect(res.totalMarkets).toBe(120);
+  });
+
+  it("supports limit=50", async () => {
+    const res = await getMarkets({ limit: 50, source: "all" }, sources);
+    expect(res.pageSize).toBe(50);
+    expect(res.markets.length).toBeLessThanOrEqual(50);
+  });
+
+  it("supports limit=100", async () => {
+    const res = await getMarkets({ limit: 100, source: "all" }, sources);
+    expect(res.pageSize).toBe(100);
+    expect(res.markets.length).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("pickCoreIndexMarkets", () => {
+  it("caps each category/source bucket at 20 markets", () => {
+    const polymarkets = Array.from({ length: 30 }, (_, i) =>
+      makeMarket({
+        id: `p-${i}`,
+        source: "polymarket",
+        categoryslugs: ["economics"],
+        categories: ["Economics"],
+        openInterest: 1000 + i * 10,
+        liquidity: 2000 + i,
+        volume24h: 500 + i,
+      }),
+    );
+    const kalshiMarkets = Array.from({ length: 30 }, (_, i) =>
+      makeMarket({
+        id: `k-${i}`,
+        source: "kalshi",
+        categoryslugs: ["economics"],
+        categories: ["Economics"],
+        openInterest: 900 + i * 9,
+        liquidity: 1900 + i,
+        volume24h: 450 + i,
+      }),
+    );
+
+    const selected = pickCoreIndexMarkets(polymarkets, kalshiMarkets);
+    const polyCount = selected.filter((m) => m.source === "polymarket").length;
+    const kalshiCount = selected.filter((m) => m.source === "kalshi").length;
+
+    expect(polyCount).toBe(20);
+    expect(kalshiCount).toBe(20);
+  });
+
+  it("keeps all markets in small category/source buckets", () => {
+    const polymarkets = Array.from({ length: 6 }, (_, i) =>
+      makeMarket({
+        id: `p-small-${i}`,
+        source: "polymarket",
+        categoryslugs: ["climate"],
+        categories: ["Climate"],
+      }),
+    );
+
+    const selected = pickCoreIndexMarkets(polymarkets, []);
+    expect(selected).toHaveLength(6);
   });
 });

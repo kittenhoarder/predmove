@@ -5,7 +5,14 @@ import { processKalshiMarkets } from "./process-kalshi";
 import { fetchManifoldMarkets } from "./manifold";
 import type { ProcessedMarket, SortMode, MarketsApiResponse } from "./types";
 
-const PAGE_LIMIT = 100;
+const MARKETS_DOUBLE_PAGE_ENABLED =
+  process.env.MARKETS_DOUBLE_PAGE_ENABLED !== "0" &&
+  process.env.MARKETS_DOUBLE_PAGE_ENABLED !== "false";
+const DEFAULT_PAGE_LIMIT = MARKETS_DOUBLE_PAGE_ENABLED ? 50 : 100;
+const ALLOWED_PAGE_LIMITS = new Set([25, 50, 100]);
+
+const CORE_INDEX_MAX_PER_CATEGORY_PER_SOURCE = 20;
+const CORE_INDEX_FLOOR_KEEP_ALL = 8;
 
 // ---------------------------------------------------------------------------
 // Stale-while-revalidate in-memory cache
@@ -218,6 +225,72 @@ export function interlaceBySourceWeighted(
   return out.length === markets.length ? out : markets;
 }
 
+function normalize(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (max <= min) return 1;
+  return (value - min) / (max - min);
+}
+
+/**
+ * Lightweight core-index market sampler:
+ * - only polymarket + kalshi
+ * - cap each category+source bucket to top N by liquidity/volume priority
+ * - keep all when the bucket is already small
+ */
+export function pickCoreIndexMarkets(
+  polymarkets: ProcessedMarket[],
+  kalshiMarkets: ProcessedMarket[],
+): ProcessedMarket[] {
+  const core = [...polymarkets, ...kalshiMarkets];
+  if (core.length === 0) return [];
+
+  const selected = new Set<string>();
+  const sources: ProcessedMarket["source"][] = ["polymarket", "kalshi"];
+
+  for (const source of sources) {
+    const sourceMarkets = core.filter((m) => m.source === source);
+    const buckets = new Map<string, ProcessedMarket[]>();
+
+    for (const market of sourceMarkets) {
+      for (const slug of market.categoryslugs) {
+        if (!buckets.has(slug)) buckets.set(slug, []);
+        buckets.get(slug)!.push(market);
+      }
+    }
+
+    for (const markets of Array.from(buckets.values())) {
+      if (markets.length < CORE_INDEX_FLOOR_KEEP_ALL) {
+        for (const market of markets) selected.add(`${market.source}:${market.id}`);
+        continue;
+      }
+
+      const oiLike = markets.map((m) => (m.openInterest !== undefined && m.openInterest > 0 ? m.openInterest : m.liquidity));
+      const vol = markets.map((m) => m.volume24h);
+      const minOi = Math.min(...oiLike);
+      const maxOi = Math.max(...oiLike);
+      const minVol = Math.min(...vol);
+      const maxVol = Math.max(...vol);
+
+      const ranked = [...markets]
+        .sort((a, b) => {
+          const aOi = a.openInterest !== undefined && a.openInterest > 0 ? a.openInterest : a.liquidity;
+          const bOi = b.openInterest !== undefined && b.openInterest > 0 ? b.openInterest : b.liquidity;
+          const aPriority = 0.7 * normalize(aOi, minOi, maxOi) + 0.3 * normalize(a.volume24h, minVol, maxVol);
+          const bPriority = 0.7 * normalize(bOi, minOi, maxOi) + 0.3 * normalize(b.volume24h, minVol, maxVol);
+          if (bPriority !== aPriority) return bPriority - aPriority;
+          if (bOi !== aOi) return bOi - aOi;
+          return b.volume24h - a.volume24h;
+        })
+        .slice(0, CORE_INDEX_MAX_PER_CATEGORY_PER_SOURCE);
+
+      for (const market of ranked) selected.add(`${market.source}:${market.id}`);
+    }
+  }
+
+  const out = core.filter((m) => selected.has(`${m.source}:${m.id}`));
+  return out.length > 0 ? out : core;
+}
+
 // ---------------------------------------------------------------------------
 // Options & feature flags
 // ---------------------------------------------------------------------------
@@ -226,6 +299,7 @@ export interface GetMarketsOptions {
   sort?: SortMode;
   category?: string;
   offset?: number;
+  limit?: number;
   /** Comma-separated market IDs for the watchlist sort mode */
   watchlistIds?: string[];
   /** When set, only return markets from this source */
@@ -369,6 +443,8 @@ export async function getMarkets(
   const sort: SortMode = opts.sort ?? "movers";
   const category = opts.category ?? "all";
   const offset = opts.offset ?? 0;
+  const requestedLimit = opts.limit ?? DEFAULT_PAGE_LIMIT;
+  const limit = ALLOWED_PAGE_LIMITS.has(requestedLimit) ? requestedLimit : DEFAULT_PAGE_LIMIT;
   const watchlistIds = opts.watchlistIds ?? [];
   const source = opts.source ?? "all";
   const fetchedAt = new Date().toISOString();
@@ -387,7 +463,7 @@ export async function getMarkets(
   const arranged = source === "all" && sort !== "watchlist"
     ? interlaceBySourceWeighted(sorted)
     : sorted;
-  const paginated = arranged.slice(offset, offset + PAGE_LIMIT);
+  const paginated = arranged.slice(offset, offset + limit);
 
   const sourceBreakdown = {
     polymarket: filtered.filter((m) => m.source === "polymarket").length,
@@ -399,6 +475,7 @@ export async function getMarkets(
     markets: paginated,
     cachedAt: fetchedAt,
     totalMarkets: filtered.length,
+    pageSize: limit,
     fromCache: false,
     sourceBreakdown,
   };
@@ -414,4 +491,19 @@ export async function getAllMarkets(
   const { polymarkets, kalshiMarkets, manifoldMarkets } =
     sources ?? (await fetchAllSources());
   return [...polymarkets, ...kalshiMarkets, ...manifoldMarkets];
+}
+
+/**
+ * Low-compute core index market set used by /api/pulse when directional-core3
+ * is enabled. Restricts to Polymarket + Kalshi and caps per category/source.
+ */
+export async function getCoreIndexMarkets(
+  sources?: AllSourcesResult,
+): Promise<ProcessedMarket[]> {
+  const { polymarkets, kalshiMarkets } = sources ?? (await fetchAllSources());
+  const selected = pickCoreIndexMarkets(polymarkets, kalshiMarkets);
+  console.info(
+    `[get-markets] core index set poly=${polymarkets.length} kalshi=${kalshiMarkets.length} selected=${selected.length}`,
+  );
+  return selected;
 }

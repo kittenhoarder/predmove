@@ -1,16 +1,22 @@
 import type { ProcessedMarket, PulseIndex } from "./types";
 import { computeIndices, PULSE_CATEGORIES, pulseBand } from "./indices";
 
+function isCore3Enabled(): boolean {
+  return process.env.INDEX_CORE3_ENABLED === "1" || process.env.INDEX_CORE3_ENABLED === "true";
+}
+
 /**
  * Compatibility layer: legacy Pulse maps to the v3 directional family.
  * This keeps existing UI contracts stable while /api/indices exposes full families.
  */
 export function computePulse(markets: ProcessedMarket[]): PulseIndex[] {
+  const core3Enabled = isCore3Enabled();
   let result = computeIndices(markets, {
     family: "directional",
     horizon: "24h",
     sourceScope: "core",
-    persist: true,
+    scoreProfile: core3Enabled ? "core3" : "full",
+    persist: core3Enabled ? false : true,
   });
 
   // Graceful degradation: if core venues are unavailable on a cold/partial fetch,
@@ -20,7 +26,8 @@ export function computePulse(markets: ProcessedMarket[]): PulseIndex[] {
       family: "directional",
       horizon: "24h",
       sourceScope: "all",
-      persist: true,
+      scoreProfile: core3Enabled ? "core3" : "full",
+      persist: core3Enabled ? false : true,
     });
   }
 
@@ -36,10 +43,9 @@ export function computePulse(markets: ProcessedMarket[]): PulseIndex[] {
         momentum: Math.round(idx.signals.momentum ?? 50),
         flow: Math.round(idx.signals.flow ?? 50),
         breadth: Math.round(idx.signals.breadth ?? 50),
-        acceleration: Math.round(idx.signals.acceleration ?? 50),
+        // Compatibility placeholder while directional-core3 omits acceleration from scoring.
+        acceleration: core3Enabled ? 50 : Math.round(idx.signals.acceleration ?? 50),
         level: Math.round(idx.signals.level ?? 50),
-        ...(idx.signals.orderflow !== undefined && { orderflow: Math.round(idx.signals.orderflow) }),
-        ...(idx.signals.smartMoney !== undefined && { smartMoney: Math.round(idx.signals.smartMoney) }),
       },
       marketCount: idx.marketCount,
       topMarkets: idx.topMarkets,

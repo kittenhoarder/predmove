@@ -21,7 +21,12 @@ import {
 import { RefreshCw, ChevronLeft, ChevronRight, LayoutGrid, List, Settings2, X } from "lucide-react";
 import HeatmapView from "./HeatmapView";
 
-const PAGE_LIMIT = 100;
+const LEGACY_PAGE_SIZE = 100;
+const SERVER_PAGE_SIZE = 50;
+const UI_PAGE_SIZE = 25;
+const MARKETS_DOUBLE_PAGE_ENABLED =
+  process.env.NEXT_PUBLIC_MARKETS_DOUBLE_PAGE_ENABLED !== "0" &&
+  process.env.NEXT_PUBLIC_MARKETS_DOUBLE_PAGE_ENABLED !== "false";
 
 type SourceFilter = "all" | "polymarket" | "kalshi" | "manifold";
 
@@ -35,10 +40,11 @@ function buildUrl(
   sort: SortMode,
   category: string,
   offset: number,
+  limit: number,
   watchlistIds: string[],
   source: SourceFilter
 ): string {
-  const params = new URLSearchParams({ sort, category, offset: String(offset) });
+  const params = new URLSearchParams({ sort, category, offset: String(offset), limit: String(limit) });
   if (sort === "watchlist" && watchlistIds.length > 0) {
     params.set("watchlist", watchlistIds.join(","));
   }
@@ -58,9 +64,9 @@ function SourceToggle({
 }) {
   const options: { id: SourceFilter; label: string; color: string; activeColor: string }[] = [
     { id: "all",        label: "·", color: "text-muted-foreground", activeColor: "bg-primary/10 text-primary border-primary/40" },
-    { id: "polymarket", label: "P", color: "text-indigo-400", activeColor: "bg-indigo-500/20 text-indigo-300 border-indigo-500/40" },
-    { id: "kalshi",     label: "K", color: "text-sky-400",    activeColor: "bg-sky-500/20 text-sky-300 border-sky-500/40" },
-    { id: "manifold",   label: "M", color: "text-violet-400", activeColor: "bg-violet-500/20 text-violet-300 border-violet-500/40" },
+    { id: "polymarket", label: "P", color: "text-cyan-400",  activeColor: "bg-cyan-500/20 text-cyan-300 border-cyan-500/40" },
+    { id: "kalshi",     label: "K", color: "text-amber-400", activeColor: "bg-amber-500/20 text-amber-300 border-amber-500/40" },
+    { id: "manifold",   label: "M", color: "text-rose-400",  activeColor: "bg-rose-500/20 text-rose-300 border-rose-500/40" },
   ];
   return (
     <div className="flex items-center rounded-md border border-border overflow-hidden shrink-0">
@@ -95,7 +101,7 @@ export default function MarketTable({
   const [sort, setSort] = useState<SortMode>(initialSort);
   const [category, setCategory] = useState(initialCategory);
   const [source, setSource] = useState<SourceFilter>("all");
-  const [offset, setOffset] = useState(0);
+  const [uiPage, setUiPage] = useState(0);
   const [viewMode, setViewMode] = useState<"table" | "heatmap">("table");
   const [cogOpen, setCogOpen] = useState(false);
   // Watchlist IDs read from localStorage; refreshed when user stars/unstars
@@ -109,11 +115,16 @@ export default function MarketTable({
     try { setWatchlistIds(Array.from(getWatchlist())); } catch { /* private browsing or full storage */ }
   }, []);
 
-  const url = buildUrl(sort, category, offset, watchlistIds, source);
+  const serverLimit = MARKETS_DOUBLE_PAGE_ENABLED ? SERVER_PAGE_SIZE : LEGACY_PAGE_SIZE;
+  const serverOffset = MARKETS_DOUBLE_PAGE_ENABLED
+    ? Math.floor(uiPage / 2) * SERVER_PAGE_SIZE
+    : uiPage * LEGACY_PAGE_SIZE;
+
+  const url = buildUrl(sort, category, serverOffset, serverLimit, watchlistIds, source);
 
   const { data, error, isLoading, isValidating, mutate } = useSWR(url, fetcher, {
     fallbackData:
-      offset === 0 && sort === initialSort && category === initialCategory && source === "all"
+      uiPage === 0 && sort === initialSort && category === initialCategory && source === "all"
         ? initialData
         : undefined,
     // WebSocket handles sub-minute freshness; SWR does full sorted-list refresh every 60s
@@ -122,7 +133,12 @@ export default function MarketTable({
     keepPreviousData: true,
   });
 
-  const markets = useMemo(() => data?.markets ?? [], [data?.markets]);
+  const fetchedMarkets = useMemo(() => data?.markets ?? [], [data?.markets]);
+  const markets = useMemo(() => {
+    if (!MARKETS_DOUBLE_PAGE_ENABLED) return fetchedMarkets;
+    const start = (uiPage % 2) * UI_PAGE_SIZE;
+    return fetchedMarkets.slice(start, start + UI_PAGE_SIZE);
+  }, [fetchedMarkets, uiPage]);
 
   // Stable key strings — computed once per markets array identity change
   const polyKey = useMemo(
@@ -146,23 +162,26 @@ export default function MarketTable({
 
   const handleSortChange = useCallback((newSort: SortMode) => {
     setSort(newSort);
-    setOffset(0);
+    setUiPage(0);
   }, []);
 
   const handleCategoryChange = useCallback((newCat: string) => {
     setCategory(newCat);
-    setOffset(0);
+    setUiPage(0);
   }, []);
 
   const handleSourceChange = useCallback((newSource: SourceFilter) => {
     setSource(newSource);
-    setOffset(0);
+    setUiPage(0);
   }, []);
 
   const totalMarkets = data?.totalMarkets ?? 0;
   const sourceBreakdown = data?.sourceBreakdown;
-  const hasMore = offset + PAGE_LIMIT < totalMarkets;
-  const hasPrev = offset > 0;
+  const visiblePageSize = MARKETS_DOUBLE_PAGE_ENABLED ? UI_PAGE_SIZE : (data?.pageSize ?? LEGACY_PAGE_SIZE);
+  const hasMore = (uiPage + 1) * visiblePageSize < totalMarkets;
+  const hasPrev = uiPage > 0;
+  const displayStart = totalMarkets > 0 ? uiPage * visiblePageSize + 1 : 0;
+  const displayEnd = Math.min((uiPage + 1) * visiblePageSize, totalMarkets);
 
   const fetchedAtText = data?.cachedAt
     ? formatDistanceToNow(new Date(data.cachedAt), { addSuffix: true })
@@ -341,7 +360,7 @@ export default function MarketTable({
             "Star markets to build your watchlist"
           ) : totalMarkets > 0 ? (
             <>
-              {offset + 1}–{Math.min(offset + PAGE_LIMIT, totalMarkets)}{" "}
+              {displayStart}–{displayEnd}{" "}
               <span className="text-muted-foreground/60">of {totalMarkets.toLocaleString()}</span>
             </>
           ) : isLoading ? null : (
@@ -405,7 +424,7 @@ export default function MarketTable({
                   <MarketRow
                     key={market.id}
                     market={market}
-                    rank={offset + idx + 1}
+                    rank={displayStart + idx}
                     onWatchlistChange={refreshWatchlist}
                     livePrice={livePrices.get(
                       market.source === "kalshi" ? market.id : market.clobTokenId
@@ -438,7 +457,7 @@ export default function MarketTable({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setOffset(Math.max(0, offset - PAGE_LIMIT))}
+                onClick={() => setUiPage(Math.max(0, uiPage - 1))}
                 className="gap-1"
               >
                 <ChevronLeft className="w-4 h-4" /> Previous
@@ -450,7 +469,7 @@ export default function MarketTable({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setOffset(offset + PAGE_LIMIT)}
+                onClick={() => setUiPage(uiPage + 1)}
                 className="gap-1"
               >
                 Next <ChevronRight className="w-4 h-4" />

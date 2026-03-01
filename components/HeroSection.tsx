@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import PulseLogo from "./PulseLogo";
+import HeroCanvas from "./HeroCanvas";
 
 export default function HeroSection() {
   const heroRef = useRef<HTMLDivElement>(null);
@@ -40,40 +40,42 @@ export default function HeroSection() {
         pointerEvents: hidden ? "none" : "auto",
       }}
     >
-      {/* Background: faded pulse logo + radial gradient */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" aria-hidden="true">
-        <PulseLogo size="md" className="!w-[320px] !h-[320px] sm:!w-[420px] sm:!h-[420px] opacity-[0.03]" />
-      </div>
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: "radial-gradient(ellipse 60% 50% at 50% 40%, hsl(var(--primary) / 0.06) 0%, transparent 70%)",
-        }}
-        aria-hidden="true"
-      />
+      {/* Full-viewport canvas: oscilloscope ECG wave + particle field */}
+      <HeroCanvas className="absolute inset-0 w-full h-full" />
 
       {/* Content */}
       <div className="relative z-10 max-w-2xl text-center px-6">
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight leading-[1.1] mb-4">
-          Prediction Market{" "}
-          <span className="text-primary">Intelligence</span>
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight leading-[1.1] mb-5">
+          See What the Markets{" "}
+          <span
+            className="inline-block"
+            style={{
+              background: "linear-gradient(135deg, hsl(172 80% 44%), hsl(160 70% 50%))",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            }}
+          >
+            Know
+          </span>
         </h1>
-        <p className="text-base sm:text-lg text-muted-foreground max-w-lg mx-auto leading-relaxed">
-          Real-time sentiment, movers, and analytics across Polymarket, Kalshi &amp; Manifold — in one view.
+        <p className="text-base sm:text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed">
+          The intelligence layer for prediction markets. Aggregated sentiment,
+          flow, and momentum from every major exchange&nbsp;&mdash;&nbsp;in real time.
         </p>
       </div>
 
       {/* Scroll indicator */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 animate-bounce">
-        <span className="text-[10px] uppercase tracking-widest text-muted-foreground/40 font-medium">
+        <span className="text-[10px] uppercase tracking-widest text-muted-foreground/50 font-medium">
           Scroll
         </span>
-        <ChevronDown className="w-4 h-4 text-muted-foreground/30" />
+        <ChevronDown className="w-4 h-4 text-muted-foreground/40" />
       </div>
 
-      {/* Bottom gradient fade into background */}
+      {/* Bottom fade into page background */}
       <div
-        className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none"
+        className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none z-10"
         style={{ background: "linear-gradient(to bottom, transparent, hsl(var(--background)))" }}
         aria-hidden="true"
       />

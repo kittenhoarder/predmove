@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
           flexDirection: "column",
           width: "100%",
           height: "100%",
-          backgroundColor: "#09090b",
+          backgroundColor: "#0c1018",
           padding: "48px",
           fontFamily: "sans-serif",
           justifyContent: "space-between",
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
             height="32"
             viewBox="0 0 40 40"
             fill="none"
-            stroke="#6366f1"
+            stroke="#0DBFA0"
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -66,8 +66,8 @@ export async function GET(req: NextRequest) {
                 marginLeft: "8px",
                 padding: "4px 12px",
                 borderRadius: "999px",
-                backgroundColor: "#27272a",
-                color: "#a1a1aa",
+                backgroundColor: "#1a2030",
+                color: "#8a9aaa",
                 fontSize: "13px",
               }}
             >
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
         {/* Stats row */}
         <div style={{ display: "flex", gap: "48px", alignItems: "flex-end" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <span style={{ color: "#71717a", fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <span style={{ color: "#7a8a8a", fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Probability
             </span>
             <span style={{ color: "#fafafa", fontSize: "48px", fontWeight: 700, lineHeight: 1 }}>
@@ -104,7 +104,7 @@ export async function GET(req: NextRequest) {
             </span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <span style={{ color: "#71717a", fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <span style={{ color: "#7a8a8a", fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               24h Change
             </span>
             <span style={{ color: changeColor, fontSize: "36px", fontWeight: 700, lineHeight: 1 }}>
@@ -113,8 +113,8 @@ export async function GET(req: NextRequest) {
           </div>
           {/* Right-align the powered-by */}
           <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
-            <span style={{ color: "#52525b", fontSize: "13px" }}>predpulse.xyz</span>
-            <span style={{ color: "#3f3f46", fontSize: "12px" }}>via Polymarket</span>
+            <span style={{ color: "#5b7070", fontSize: "13px" }}>predpulse.xyz</span>
+            <span style={{ color: "#3d5555", fontSize: "12px" }}>via Polymarket</span>
           </div>
         </div>
       </div>

@@ -31,10 +31,8 @@ export default function PulseDashboard({ initialData, large = false }: PulseDash
     pulseFetcher,
     {
       fallbackData: initialData,
-      refreshInterval: 60_000,
+      refreshInterval: 120_000,
       revalidateOnFocus: false,
-      shouldRetryOnError: true,
-      errorRetryInterval: 10_000,
     }
   );
 

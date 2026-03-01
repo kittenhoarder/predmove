@@ -74,16 +74,16 @@ export default function PulsePage() {
           </div>
           <p className="text-sm text-muted-foreground max-w-xl">
             A proprietary composite sentiment index across 8 market categories. Each score
-            synthesizes polarity-adjusted momentum, flow, breadth, acceleration, and optional
-            microstructure signals across Polymarket and Kalshi.
+            synthesizes polarity-adjusted momentum, flow, and breadth across Polymarket and Kalshi,
+            with certainty context shown separately.
           </p>
           <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-2 h-2 rounded-full bg-indigo-400" />
+              <span className="inline-block w-2 h-2 rounded-full bg-cyan-400" />
               Polymarket (CLOB on-chain)
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-2 h-2 rounded-full bg-sky-400" />
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
               Kalshi (CFTC-regulated DCM)
             </span>
           </div>
@@ -104,9 +104,8 @@ export default function PulsePage() {
           <p className="font-semibold text-foreground/70 uppercase tracking-wider text-[10px]">Methodology</p>
           <p>
             Pulse is now the directional family alias in the operator index stack. The directional
-            score uses polarity-adjusted signals with robust rolling normalization: momentum (30%),
-            flow (25%), breadth (15%), acceleration (15%), plus optional orderflow (10%) and smart-money
-            (5%) when minimum coverage gates are met.
+            score uses a low-compute core profile: momentum (45%), flow (35%), and breadth (20%).
+            Richer families and diagnostics remain available via the operator indices endpoints.
           </p>
           <p>
             Confidence is computed as data freshness × source agreement × feature coverage.

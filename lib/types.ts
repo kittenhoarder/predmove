@@ -212,7 +212,7 @@ export interface PulseIndex {
     momentum: number;           // OI-weighted 7d price change (direction)
     flow: number;               // volume-weighted 24h price change (money-backed direction)
     breadth: number;            // volume-magnitude-weighted bullish breadth
-    acceleration: number;       // 24h rate vs 7d rate — is the move intensifying?
+    acceleration?: number;      // compatibility placeholder (neutral 50 in core3 mode)
     level: number;              // volume-weighted avg probability (context anchor)
     orderflow?: number;         // bid/ask depth imbalance from orderbook (optional)
     smartMoney?: number;        // directional whale YES/NO bias (optional)
@@ -238,6 +238,7 @@ export interface PulseIndex {
 export type IndexFamily = "directional" | "liquidity" | "divergence" | "certainty";
 
 export type IndexHorizon = "24h" | "7d";
+export type IndexScoreProfile = "core3" | "full";
 
 export type IndexSourceScope = "core" | "all" | "polymarket" | "kalshi" | "manifold";
 
@@ -301,6 +302,7 @@ export interface MarketsApiResponse {
   // ISO timestamp of when data was fetched from Gamma (not request time)
   cachedAt: string;
   totalMarkets: number;
+  pageSize: number;
   fromCache: boolean;
   // Market counts by source for the current filtered set (pre-pagination)
   sourceBreakdown: {
