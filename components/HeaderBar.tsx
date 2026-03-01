@@ -28,7 +28,7 @@ export default function HeaderBar() {
   const [drawerIndex, setDrawerIndex] = useState<PulseIndex | null>(null);
 
   const { data } = useSWR<PulseApiResponse>(PULSE_SWR_KEY, pulseFetcher, {
-    refreshInterval: 60_000,
+    refreshInterval: 120_000,
     revalidateOnFocus: false,
   });
 

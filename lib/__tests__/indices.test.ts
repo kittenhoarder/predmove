@@ -122,4 +122,38 @@ describe("computeIndices (operator index families)", () => {
     expect(families.has("divergence")).toBe(true);
     expect(families.has("certainty")).toBe(true);
   });
+
+  it("core3 directional score ignores optional microstructure signals", () => {
+    const proRisk = Array.from({ length: 5 }, (_, i) =>
+      makeMarket({
+        id: `pr-${i}`,
+        orderbookDepth: { bids: [[0.6, 200]], asks: [[0.4, 20]], depthScore: 95 },
+        topHolders: [{ address: "0xA", shares: 900, side: "YES" }, { address: "0xB", shares: 100, side: "NO" }],
+      }),
+    );
+    const antiRisk = Array.from({ length: 5 }, (_, i) =>
+      makeMarket({
+        id: `ar-${i}`,
+        orderbookDepth: { bids: [[0.4, 20]], asks: [[0.6, 200]], depthScore: 5 },
+        topHolders: [{ address: "0xA", shares: 900, side: "NO" }, { address: "0xB", shares: 100, side: "YES" }],
+      }),
+    );
+
+    const core3A = computeIndices(proRisk, { family: "directional", sourceScope: "core", scoreProfile: "core3", persist: false });
+    const core3B = computeIndices(antiRisk, { family: "directional", sourceScope: "core", scoreProfile: "core3", persist: false });
+    const fullA = computeIndices(proRisk, { family: "directional", sourceScope: "core", scoreProfile: "full", persist: false });
+    const fullB = computeIndices(antiRisk, { family: "directional", sourceScope: "core", scoreProfile: "full", persist: false });
+
+    const core3ScoreA = core3A.indices.find((i) => i.category === "economics")!.score;
+    const core3ScoreB = core3B.indices.find((i) => i.category === "economics")!.score;
+    const fullScoreA = fullA.indices.find((i) => i.category === "economics")!.score;
+    const fullScoreB = fullB.indices.find((i) => i.category === "economics")!.score;
+    const core3Signals = core3A.indices.find((i) => i.category === "economics")!.signals;
+
+    expect(core3ScoreA).toBe(core3ScoreB);
+    expect(fullScoreA).not.toBe(fullScoreB);
+    expect(core3Signals.acceleration).toBeUndefined();
+    expect(core3Signals.orderflow).toBeUndefined();
+    expect(core3Signals.smartMoney).toBeUndefined();
+  });
 });

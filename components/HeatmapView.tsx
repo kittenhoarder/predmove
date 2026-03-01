@@ -28,7 +28,7 @@ function changeToColor(change: number): string {
   if (change >= 8)  return "#22c55e";   // green
   if (change >= 3)  return "#4ade80";   // light green
   if (change >= 0.5) return "#86efac";  // pale green
-  if (change > -0.5) return "#52525b";  // neutral
+  if (change > -0.5) return "#4a6b6b";  // neutral
   if (change > -3)  return "#fca5a5";   // pale red
   if (change > -8)  return "#f87171";   // light red
   if (change > -15) return "#ef4444";   // red

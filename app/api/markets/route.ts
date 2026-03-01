@@ -13,6 +13,8 @@ export async function GET(req: NextRequest) {
     const category = searchParams.get("category") ?? "all";
     const rawOffset = parseInt(searchParams.get("offset") ?? "0", 10);
     const offset = isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
+    const rawLimit = parseInt(searchParams.get("limit") ?? "", 10);
+    const limit = [25, 50, 100].includes(rawLimit) ? rawLimit : undefined;
 
     // Watchlist IDs passed as comma-separated string from client localStorage
     const watchlistParam = searchParams.get("watchlist") ?? "";
@@ -23,7 +25,7 @@ export async function GET(req: NextRequest) {
       ? sourceParam
       : "all") as "polymarket" | "kalshi" | "manifold" | "all";
 
-    const data = await getMarkets({ sort, category, offset, watchlistIds, source });
+    const data = await getMarkets({ sort, category, offset, limit, watchlistIds, source });
 
     return NextResponse.json(data, {
       headers: {

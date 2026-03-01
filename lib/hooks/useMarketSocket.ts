@@ -8,6 +8,17 @@ const KALSHI_WS_URL = "wss://api.elections.kalshi.com/trade-api/ws/v2";
 const MANIFOLD_WS_URL = "wss://api.manifold.markets/ws";
 const PING_INTERVAL_MS = 10_000;
 const RECONNECT_DELAYS_MS = [2_000, 4_000, 8_000, 16_000, 30_000];
+const MAX_RECONNECT_ATTEMPTS =
+  Number.parseInt(process.env.NEXT_PUBLIC_WS_MAX_RECONNECT_ATTEMPTS ?? "3", 10) || 3;
+const ENABLE_POLY_WS =
+  process.env.NEXT_PUBLIC_ENABLE_POLY_WS !== "0" &&
+  process.env.NEXT_PUBLIC_ENABLE_POLY_WS !== "false";
+const ENABLE_KALSHI_WS =
+  process.env.NEXT_PUBLIC_ENABLE_KALSHI_WS === "1" ||
+  process.env.NEXT_PUBLIC_ENABLE_KALSHI_WS === "true";
+const ENABLE_MANIFOLD_WS =
+  process.env.NEXT_PUBLIC_ENABLE_MANIFOLD_WS === "1" ||
+  process.env.NEXT_PUBLIC_ENABLE_MANIFOLD_WS === "true";
 
 export type SocketStatus = "connecting" | "open" | "closed";
 
@@ -31,8 +42,10 @@ function createReconnectingSocket(params: {
   onMessage: (data: unknown) => void;
   onStatusChange: (s: SocketStatus) => void;
   mountedRef: React.MutableRefObject<boolean>;
+  maxReconnectAttempts?: number;
 }): { close: () => void } {
   const { url, onOpen, onMessage, onStatusChange, mountedRef } = params;
+  const maxReconnectAttempts = params.maxReconnectAttempts ?? MAX_RECONNECT_ATTEMPTS;
   let ws: WebSocket | null = null;
   let pingInterval: ReturnType<typeof setInterval> | null = null;
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -65,6 +78,7 @@ function createReconnectingSocket(params: {
       if (!mountedRef.current || closed) return;
       if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
       onStatusChange("closed");
+      if (attemptCount >= maxReconnectAttempts) return;
       const delay = RECONNECT_DELAYS_MS[Math.min(attemptCount, RECONNECT_DELAYS_MS.length - 1)];
       attemptCount += 1;
       reconnectTimeout = setTimeout(connect, delay);
@@ -141,7 +155,7 @@ export function useMarketSocket(
   // Polymarket connection
   useEffect(() => {
     mountedRef.current = true;
-    if (typeof window === "undefined" || tokenIds.length === 0) return;
+    if (typeof window === "undefined" || !ENABLE_POLY_WS || tokenIds.length === 0) return;
 
     polySocketRef.current?.close();
     polySocketRef.current = createReconnectingSocket({
@@ -163,6 +177,7 @@ export function useMarketSocket(
       },
       onStatusChange: setPolyStatus,
       mountedRef,
+      maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
     });
 
     return () => {
@@ -174,7 +189,7 @@ export function useMarketSocket(
 
   // Kalshi connection
   useEffect(() => {
-    if (typeof window === "undefined" || kalshiTickers.length === 0) return;
+    if (typeof window === "undefined" || !ENABLE_KALSHI_WS || kalshiTickers.length === 0) return;
 
     kalshiSocketRef.current?.close();
     kalshiSocketRef.current = createReconnectingSocket({
@@ -205,6 +220,7 @@ export function useMarketSocket(
       },
       onStatusChange: setKalshiStatus,
       mountedRef,
+      maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
     });
 
     return () => {
@@ -216,7 +232,7 @@ export function useMarketSocket(
 
   // Manifold connection
   useEffect(() => {
-    if (typeof window === "undefined" || manifoldIds.length === 0) return;
+    if (typeof window === "undefined" || !ENABLE_MANIFOLD_WS || manifoldIds.length === 0) return;
 
     manifoldSocketRef.current?.close();
     manifoldSocketRef.current = createReconnectingSocket({
@@ -239,6 +255,7 @@ export function useMarketSocket(
       },
       onStatusChange: setManifoldStatus,
       mountedRef,
+      maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
     });
 
     return () => {

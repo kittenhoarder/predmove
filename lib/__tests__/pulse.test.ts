@@ -43,6 +43,7 @@ function makeMarket(overrides: Partial<ProcessedMarket> = {}): ProcessedMarket {
 
 beforeEach(() => {
   process.env.INDEX_STORE_PATH = TEST_STORE;
+  process.env.INDEX_CORE3_ENABLED = "true";
   if (fs.existsSync(TEST_STORE)) fs.unlinkSync(TEST_STORE);
 });
 
@@ -60,8 +61,10 @@ describe("computePulse (directional compatibility alias)", () => {
     expect(idx.signals).toHaveProperty("momentum");
     expect(idx.signals).toHaveProperty("flow");
     expect(idx.signals).toHaveProperty("breadth");
-    expect(idx.signals).toHaveProperty("acceleration");
+    expect(idx.signals.acceleration).toBe(50);
     expect(idx.signals).toHaveProperty("level");
+    expect((idx.signals as Record<string, unknown>).orderflow).toBeUndefined();
+    expect((idx.signals as Record<string, unknown>).smartMoney).toBeUndefined();
     expect(idx.family).toBe("directional");
     expect(idx.horizon).toBe("24h");
     expect(typeof idx.confidence).toBe("number");

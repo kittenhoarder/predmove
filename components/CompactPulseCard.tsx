@@ -5,7 +5,7 @@ import type { PulseIndex } from "@/lib/types";
 const BAND_HEX: Record<PulseIndex["band"], string> = {
   "Extreme Bearish": "#ef4444",
   "Bearish":         "#f87171",
-  "Neutral":         "#71717a",
+  "Neutral":         "#5b8a8a",
   "Bullish":         "#2dd4bf",
   "Extreme Bullish": "#34d399",
 };

@@ -6,11 +6,11 @@ import type { PulseIndex } from "@/lib/types";
 import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 
 const BAND_COLORS: Record<PulseIndex["band"], { text: string; hex: string }> = {
-  "Extreme Bearish": { text: "text-red-500",    hex: "#ef4444" },
-  "Bearish":         { text: "text-red-400",    hex: "#f87171" },
-  "Neutral":         { text: "text-zinc-400",   hex: "#71717a" },
-  "Bullish":         { text: "text-teal-400",   hex: "#2dd4bf" },
-  "Extreme Bullish": { text: "text-emerald-400",hex: "#34d399" },
+  "Extreme Bearish": { text: "text-red-500",        hex: "#ef4444" },
+  "Bearish":         { text: "text-red-400",        hex: "#f87171" },
+  "Neutral":         { text: "text-teal-400/60",    hex: "#5b8a8a" },
+  "Bullish":         { text: "text-teal-400",       hex: "#2dd4bf" },
+  "Extreme Bullish": { text: "text-emerald-400",    hex: "#34d399" },
 };
 
 interface PulseCardProps {
@@ -115,19 +115,19 @@ export default function PulseCard({ index, large = false }: PulseCardProps) {
         <span className="flex items-center gap-1.5">
           {index.marketCount.polymarket > 0 && (
             <span className="inline-flex items-center gap-0.5">
-              <span className="inline-block w-1 h-1 rounded-full bg-indigo-400" />
+              <span className="inline-block w-1 h-1 rounded-full bg-cyan-400" />
               {index.marketCount.polymarket}P
             </span>
           )}
           {index.marketCount.kalshi > 0 && (
             <span className="inline-flex items-center gap-0.5">
-              <span className="inline-block w-1 h-1 rounded-full bg-sky-400" />
+              <span className="inline-block w-1 h-1 rounded-full bg-amber-400" />
               {index.marketCount.kalshi}K
             </span>
           )}
           {index.marketCount.manifold > 0 && (
             <span className="inline-flex items-center gap-0.5">
-              <span className="inline-block w-1 h-1 rounded-full bg-violet-400" />
+              <span className="inline-block w-1 h-1 rounded-full bg-rose-400" />
               {index.marketCount.manifold}M
             </span>
           )}
@@ -144,13 +144,10 @@ export default function PulseCard({ index, large = false }: PulseCardProps) {
             <div className="space-y-1.5">
               {(
                 [
-                  { key: "momentum",     label: "Momentum",     pct: "30%" },
-                  { key: "flow",         label: "Flow",         pct: "25%" },
-                  { key: "breadth",      label: "Breadth",      pct: "15%" },
-                  { key: "acceleration", label: "Accel",        pct: "15%" },
+                  { key: "momentum",     label: "Momentum",     pct: "45%" },
+                  { key: "flow",         label: "Flow",         pct: "35%" },
+                  { key: "breadth",      label: "Breadth",      pct: "20%" },
                   { key: "level",        label: "Certainty",    pct: "ctx" },
-                  { key: "orderflow",    label: "Orderflow",    pct: "10%" },
-                  { key: "smartMoney",   label: "Smart $",      pct: "5%"  },
                 ] as { key: keyof typeof index.signals; label: string; pct: string }[]
               )
               .filter(({ key }) => index.signals[key] !== undefined)
@@ -196,10 +193,10 @@ export default function PulseCard({ index, large = false }: PulseCardProps) {
                     <span
                       className={`inline-flex shrink-0 items-center justify-center w-3.5 h-3.5 rounded-sm text-[8px] font-bold ${
                         m.source === "kalshi"
-                          ? "bg-sky-500/20 text-sky-400"
+                          ? "bg-amber-500/20 text-amber-400"
                           : m.source === "manifold"
-                            ? "bg-violet-500/20 text-violet-400"
-                            : "bg-indigo-500/20 text-indigo-400"
+                            ? "bg-rose-500/20 text-rose-400"
+                            : "bg-cyan-500/20 text-cyan-400"
                       }`}
                     >
                       {m.source === "kalshi" ? "K" : m.source === "manifold" ? "M" : "P"}
