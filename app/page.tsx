@@ -1,29 +1,14 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { fetchAllSources, getMarkets, getAllMarkets } from "@/lib/get-markets";
-import { computePulse } from "@/lib/pulse";
-import type { PulseApiResponse } from "@/lib/types";
 import MarketTable from "@/components/MarketTable";
 import PulseDashboard from "@/components/PulseDashboard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import PulseLogo from "@/components/PulseLogo";
 
-export const dynamic = "force-dynamic";
-
-export default async function HomePage() {
-  // Single upstream fetch for all three sources — reused by both table and Pulse
-  const sources = await fetchAllSources();
-  const [initialData, pulseMarkets] = await Promise.all([
-    getMarkets({ sort: "movers", category: "all", offset: 0 }, sources),
-    getAllMarkets(sources),
-  ]);
-
-  const pulseIndices = computePulse(pulseMarkets);
-  const initialPulse: PulseApiResponse = {
-    indices: pulseIndices,
-    computedAt: new Date().toISOString(),
-  };
-
+// Page shell renders immediately; data loads client-side via SWR from /api/markets and /api/pulse.
+// Removing the blocking SSR fetchAllSources() call avoids a 60-90s white screen caused by
+// Kalshi rate-limiting (429s) on cold starts.
+export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <script
@@ -68,10 +53,7 @@ export default async function HomePage() {
             Pulse
           </Link>
 
-          {/* Market count */}
-          <span className="text-xs text-muted-foreground/60 hidden sm:block tabular-nums shrink-0">
-            {initialData.totalMarkets.toLocaleString()} markets
-          </span>
+          {/* Market count — rendered by MarketTable once data loads */}
 
           {/* Theme toggle */}
           <ThemeToggle />
@@ -82,7 +64,7 @@ export default async function HomePage() {
       <main className="flex-1 max-w-screen-2xl w-full mx-auto px-4 sm:px-6 pt-0 pb-6 flex flex-col">
         {/* Pulse hero — above the fold */}
         <Suspense fallback={null}>
-          <PulseDashboard initialData={initialPulse} />
+          <PulseDashboard />
         </Suspense>
 
         {/* "Markets" label — left-aligned, no broken horizontal rule */}
@@ -99,7 +81,7 @@ export default async function HomePage() {
             </div>
           }
         >
-          <MarketTable initialData={initialData} />
+          <MarketTable />
         </Suspense>
       </main>
 
