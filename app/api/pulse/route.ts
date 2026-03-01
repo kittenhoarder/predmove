@@ -3,6 +3,8 @@ import { getAllMarkets } from "@/lib/get-markets";
 import { computePulse } from "@/lib/pulse";
 import type { PulseApiResponse } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const markets = await getAllMarkets();
