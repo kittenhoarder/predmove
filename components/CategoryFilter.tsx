@@ -1,17 +1,27 @@
 "use client";
 
+import {
+  Globe2,
+  Landmark,
+  Bitcoin,
+  Trophy,
+  Clapperboard,
+  TrendingUp,
+  FlaskConical,
+  Sparkles,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const CATEGORIES = [
-  "All",
-  "Politics",
-  "Crypto",
-  "Sports",
-  "Entertainment",
-  "Economics",
-  "Science",
-  "Pop Culture",
-];
+  { value: "all",           label: "All",           icon: Globe2 },
+  { value: "Politics",      label: "Politics",       icon: Landmark },
+  { value: "Crypto",        label: "Crypto",         icon: Bitcoin },
+  { value: "Sports",        label: "Sports",         icon: Trophy },
+  { value: "Entertainment", label: "Entertainment",  icon: Clapperboard },
+  { value: "Economics",     label: "Economics",      icon: TrendingUp },
+  { value: "Science",       label: "Science",        icon: FlaskConical },
+  { value: "Pop Culture",   label: "Pop Culture",    icon: Sparkles },
+] as const;
 
 interface CategoryFilterProps {
   active: string;
@@ -20,23 +30,22 @@ interface CategoryFilterProps {
 
 export default function CategoryFilter({ active, onChange }: CategoryFilterProps) {
   return (
-    <div className="flex gap-1.5 overflow-x-auto scrollbar-none" aria-label="Filter by category">
-      {CATEGORIES.map((cat) => {
-        const value = cat === "All" ? "all" : cat;
+    <div className="flex gap-1 overflow-x-auto scrollbar-none" aria-label="Filter by category" role="group">
+      {CATEGORIES.map(({ value, label, icon: Icon }) => {
         const isActive = active === value;
         return (
           <Button
-            key={cat}
+            key={value}
             variant={isActive ? "outline" : "ghost"}
             size="sm"
+            title={label}
+            aria-label={label}
             onClick={() => onChange(value)}
-            className={`rounded-full text-xs h-7 shrink-0 ${
-              isActive
-                ? "border-primary text-primary"
-                : "text-muted-foreground"
+            className={`rounded-full h-7 w-7 p-0 shrink-0 ${
+              isActive ? "border-primary text-primary" : "text-muted-foreground"
             }`}
           >
-            {cat}
+            <Icon className="w-3.5 h-3.5" />
           </Button>
         );
       })}

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
+  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -21,6 +22,8 @@ import { RefreshCw, ChevronLeft, ChevronRight, LayoutGrid, List, Settings2, X } 
 import HeatmapView from "./HeatmapView";
 
 const PAGE_LIMIT = 100;
+
+type SourceFilter = "all" | "polymarket" | "kalshi" | "manifold";
 
 async function fetcher(url: string): Promise<MarketsApiResponse> {
   const res = await fetch(url);
@@ -32,13 +35,50 @@ function buildUrl(
   sort: SortMode,
   category: string,
   offset: number,
-  watchlistIds: string[]
+  watchlistIds: string[],
+  source: SourceFilter
 ): string {
   const params = new URLSearchParams({ sort, category, offset: String(offset) });
   if (sort === "watchlist" && watchlistIds.length > 0) {
     params.set("watchlist", watchlistIds.join(","));
   }
+  if (source !== "all") {
+    params.set("source", source);
+  }
   return `/api/markets?${params.toString()}`;
+}
+
+/** Compact 3-button source toggle rendered inline */
+function SourceToggle({
+  value,
+  onChange,
+}: {
+  value: SourceFilter;
+  onChange: (s: SourceFilter) => void;
+}) {
+  const options: { id: SourceFilter; label: string; color: string; activeColor: string }[] = [
+    { id: "polymarket", label: "P", color: "text-indigo-400", activeColor: "bg-indigo-500/20 text-indigo-300 border-indigo-500/40" },
+    { id: "all",        label: "·", color: "text-muted-foreground", activeColor: "bg-primary/10 text-primary border-primary/40" },
+    { id: "kalshi",     label: "K", color: "text-sky-400",    activeColor: "bg-sky-500/20 text-sky-300 border-sky-500/40" },
+    { id: "manifold",   label: "M", color: "text-violet-400", activeColor: "bg-violet-500/20 text-violet-300 border-violet-500/40" },
+  ];
+  return (
+    <div className="flex items-center rounded-md border border-border overflow-hidden shrink-0">
+      {options.map((opt) => (
+        <button
+          key={opt.id}
+          onClick={() => onChange(opt.id)}
+          aria-label={`Filter: ${opt.id}`}
+          aria-pressed={value === opt.id}
+          className={`h-7 px-2 text-[11px] font-bold transition-colors border-l first:border-l-0 border-border ${
+            value === opt.id ? opt.activeColor : `${opt.color} hover:text-foreground`
+          }`}
+        >
+          {opt.label === "·" ? <span className="text-xs">All</span> : opt.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 interface MarketTableProps {
@@ -54,6 +94,7 @@ export default function MarketTable({
 }: MarketTableProps) {
   const [sort, setSort] = useState<SortMode>(initialSort);
   const [category, setCategory] = useState(initialCategory);
+  const [source, setSource] = useState<SourceFilter>("all");
   const [offset, setOffset] = useState(0);
   const [viewMode, setViewMode] = useState<"table" | "heatmap">("table");
   const [cogOpen, setCogOpen] = useState(false);
@@ -61,18 +102,18 @@ export default function MarketTable({
   const [watchlistIds, setWatchlistIds] = useState<string[]>([]);
 
   useEffect(() => {
-    setWatchlistIds(Array.from(getWatchlist()));
+    try { setWatchlistIds(Array.from(getWatchlist())); } catch { /* private browsing or full storage */ }
   }, []);
 
   const refreshWatchlist = useCallback(() => {
-    setWatchlistIds(Array.from(getWatchlist()));
+    try { setWatchlistIds(Array.from(getWatchlist())); } catch { /* private browsing or full storage */ }
   }, []);
 
-  const url = buildUrl(sort, category, offset, watchlistIds);
+  const url = buildUrl(sort, category, offset, watchlistIds, source);
 
   const { data, error, isLoading, isValidating, mutate } = useSWR(url, fetcher, {
     fallbackData:
-      offset === 0 && sort === initialSort && category === initialCategory
+      offset === 0 && sort === initialSort && category === initialCategory && source === "all"
         ? initialData
         : undefined,
     // WebSocket handles sub-minute freshness; SWR does full sorted-list refresh every 60s
@@ -83,11 +124,11 @@ export default function MarketTable({
 
   const markets = data?.markets ?? [];
 
-  // Derive stable token ID lists for WebSocket subscriptions per source
+  // Derive stable token ID lists for WebSocket subscriptions (polymarket only)
   const tokenIds = useMemo(
-    () => markets.filter((m) => m.source !== "kalshi").map((m) => m.clobTokenId).filter(Boolean),
+    () => markets.filter((m) => m.source === "polymarket").map((m) => m.clobTokenId).filter(Boolean),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [markets.filter((m) => m.source !== "kalshi").map((m) => m.clobTokenId).join(",")]
+    [markets.filter((m) => m.source === "polymarket").map((m) => m.clobTokenId).join(",")]
   );
 
   const kalshiTickers = useMemo(
@@ -105,6 +146,11 @@ export default function MarketTable({
 
   const handleCategoryChange = useCallback((newCat: string) => {
     setCategory(newCat);
+    setOffset(0);
+  }, []);
+
+  const handleSourceChange = useCallback((newSource: SourceFilter) => {
+    setSource(newSource);
     setOffset(0);
   }, []);
 
@@ -132,6 +178,8 @@ export default function MarketTable({
           />
           <div className="shrink-0 w-px h-4 bg-border mx-2" />
           <CategoryFilter active={category} onChange={handleCategoryChange} />
+          <div className="shrink-0 w-px h-4 bg-border mx-2" />
+          <SourceToggle value={source} onChange={handleSourceChange} />
           <div className="ml-auto shrink-0 flex items-center gap-2 pl-3">
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span
@@ -228,6 +276,12 @@ export default function MarketTable({
               <CategoryFilter active={category} onChange={(c) => { handleCategoryChange(c); setCogOpen(false); }} />
             </div>
 
+            {/* Source filter */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">Source</p>
+              <SourceToggle value={source} onChange={(s) => { handleSourceChange(s); setCogOpen(false); }} />
+            </div>
+
             {/* View mode */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">View</p>
@@ -301,70 +355,72 @@ export default function MarketTable({
         <HeatmapView markets={markets} />
       )}
 
-      {/* Table — min-w ensures all columns are always present; overflow-auto on the Table wrapper enables horizontal scroll on mobile */}
-      {viewMode === "table" && <div className="rounded-xl border border-border overflow-hidden">
-        {/* table-fixed prevents columns reflowing when expansion rows are inserted */}
-        <Table className="table-fixed min-w-[640px]">
-          <colgroup>
-            <col className="w-10" />   {/* # */}
-            <col />                    {/* Market — takes remaining width */}
-            <col className="w-24" />   {/* Probability */}
-            <col className="w-24" />   {/* 24h Change */}
-            <col className="w-24" />   {/* 24h Volume */}
-            <col className="w-24" />   {/* Liquidity */}
-            <col className="w-16" />   {/* Trade */}
-          </colgroup>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="text-xs">#</TableHead>
-              <TableHead className="text-xs">Market</TableHead>
-              <TableHead className="text-xs text-right whitespace-nowrap">Probability</TableHead>
-              <TableHead className="text-xs text-right whitespace-nowrap">24h Change</TableHead>
-              <TableHead className="text-xs text-right whitespace-nowrap">24h Volume</TableHead>
-              <TableHead className="text-xs text-right">Liquidity</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading &&
-              Array.from({ length: 10 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
-                    <TableHead key={j} className="py-3">
-                      <div className="h-4 bg-muted rounded animate-pulse" />
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-
-            {!isLoading &&
-              markets.map((market, idx) => (
-                <MarketRow
-                  key={market.id}
-                  market={market}
-                  rank={offset + idx + 1}
-                  onWatchlistChange={refreshWatchlist}
-                  livePrice={livePrices.get(
-                    market.source === "kalshi" ? market.id : market.clobTokenId
-                  )}
-                />
-              ))}
-
-            {!isLoading && markets.length === 0 && !error && (
-              <TableRow>
-                <TableHead
-                  colSpan={7}
-                  className="py-12 text-center text-muted-foreground text-sm font-normal"
-                >
-                  {emptyWatchlist
-                    ? "No saved markets yet — star a market to add it to your watchlist."
-                    : "No markets found for this filter."}
-                </TableHead>
+      {/* Table */}
+      {viewMode === "table" && (
+        <div className="rounded-xl border border-border overflow-hidden">
+          {/* table-fixed prevents columns reflowing when expansion rows are inserted */}
+          <Table className="table-fixed min-w-[640px]">
+            <colgroup>
+              <col className="w-12" />   {/* # — widened to fit 3-digit ranks */}
+              <col />                    {/* Market — takes remaining width */}
+              <col className="w-24" />   {/* Probability */}
+              <col className="w-24" />   {/* 24h Change */}
+              <col className="w-24" />   {/* 24h Volume */}
+              <col className="w-24" />   {/* Liquidity */}
+              <col className="w-16" />   {/* Trade */}
+            </colgroup>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="text-xs">#</TableHead>
+                <TableHead className="text-xs">Market</TableHead>
+                <TableHead className="text-xs text-right whitespace-nowrap">Probability</TableHead>
+                <TableHead className="text-xs text-right whitespace-nowrap">24h Change</TableHead>
+                <TableHead className="text-xs text-right whitespace-nowrap">24h Volume</TableHead>
+                <TableHead className="text-xs text-right">Liquidity</TableHead>
+                <TableHead />
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>}
+            </TableHeader>
+            <TableBody>
+              {isLoading &&
+                Array.from({ length: 10 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 7 }).map((_, j) => (
+                      <TableCell key={j} className="py-3">
+                        <div className="h-4 bg-muted rounded animate-pulse" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+
+              {!isLoading &&
+                markets.map((market, idx) => (
+                  <MarketRow
+                    key={market.id}
+                    market={market}
+                    rank={offset + idx + 1}
+                    onWatchlistChange={refreshWatchlist}
+                    livePrice={livePrices.get(
+                      market.source === "kalshi" ? market.id : market.clobTokenId
+                    )}
+                  />
+                ))}
+
+              {!isLoading && markets.length === 0 && !error && (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="py-12 text-center text-muted-foreground text-sm font-normal"
+                  >
+                    {emptyWatchlist
+                      ? "No saved markets yet — star a market to add it to your watchlist."
+                      : "No markets found for this filter."}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {/* Pagination — only in table view when there are multiple pages */}
       {viewMode === "table" && (hasPrev || hasMore) && (

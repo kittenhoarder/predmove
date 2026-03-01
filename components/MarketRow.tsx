@@ -53,7 +53,9 @@ export default function MarketRow({ market, rank, onWatchlistChange, livePrice }
   const isNeutral = market.oneDayChange === 0;
   const tradeUrl = market.source === "kalshi"
     ? `https://kalshi.com/markets/${market.eventSlug}`
-    : `https://polymarket.com/event/${market.eventSlug}`;
+    : market.source === "manifold"
+      ? market.eventSlug  // Manifold stores the full URL in eventSlug
+      : `https://polymarket.com/event/${market.eventSlug}`;
 
   function handleStar(e: React.MouseEvent) {
     e.stopPropagation();
@@ -95,10 +97,12 @@ export default function MarketRow({ market, rank, onWatchlistChange, livePrice }
               className={`text-[9px] px-1 py-0 rounded font-semibold tracking-wide ${
                 market.source === "kalshi"
                   ? "border-sky-500/40 text-sky-400 bg-sky-500/10"
-                  : "border-indigo-500/40 text-indigo-400 bg-indigo-500/10"
+                  : market.source === "manifold"
+                    ? "border-violet-500/40 text-violet-400 bg-violet-500/10"
+                    : "border-indigo-500/40 text-indigo-400 bg-indigo-500/10"
               }`}
             >
-              {market.source === "kalshi" ? "K" : "P"}
+              {market.source === "kalshi" ? "K" : market.source === "manifold" ? "M" : "P"}
             </Badge>
             {market.categories.slice(0, 2).map((cat) => (
               <Badge
@@ -167,7 +171,7 @@ export default function MarketRow({ market, rank, onWatchlistChange, livePrice }
             >
               <Star className={`w-3.5 h-3.5 ${starred ? "fill-amber-400" : ""}`} />
             </button>
-            {market.source !== "kalshi" && (
+            {market.source === "polymarket" && (
               <a
                 href={`/market/${market.eventSlug}`}
                 aria-label={`Detail page for ${market.question}`}
@@ -181,7 +185,7 @@ export default function MarketRow({ market, rank, onWatchlistChange, livePrice }
               href={tradeUrl}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`Open ${market.question} on ${market.source === "kalshi" ? "Kalshi" : "Polymarket"}`}
+              aria-label={`Open ${market.question} on ${market.source === "kalshi" ? "Kalshi" : market.source === "manifold" ? "Manifold" : "Polymarket"}`}
               className="inline-flex items-center gap-1 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <ExternalLink className="w-3 h-3" />

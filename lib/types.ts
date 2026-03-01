@@ -110,7 +110,7 @@ export interface ProcessedMarket {
   id: string;
   question: string;
   // Data source — drives source badge in the UI
-  source: "polymarket" | "kalshi";
+  source: "polymarket" | "kalshi" | "manifold";
   // Event-level slug used to build: https://polymarket.com/event/{eventSlug}
   eventSlug: string;
   // Event-level title (e.g. "MicroStrategy Bitcoin 2025")
@@ -185,9 +185,9 @@ export interface PulseIndex {
     consensus: number;
   };
   // Number of constituent markets by source
-  marketCount: { polymarket: number; kalshi: number; total: number };
+  marketCount: { polymarket: number; kalshi: number; manifold: number; total: number };
   // Top 5 constituent market IDs + questions + scores for card expansion
-  topMarkets: Array<{ id: string; question: string; currentPrice: number; source: "polymarket" | "kalshi" }>;
+  topMarkets: Array<{ id: string; question: string; currentPrice: number; source: "polymarket" | "kalshi" | "manifold" }>;
   // Up to 48 hourly snapshots (oldest first) for sparkline
   history: PulseSnapshot[];
   // ISO timestamp of computation
