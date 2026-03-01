@@ -4,29 +4,41 @@ import { fetchWithTimeout } from "./fetch-utils";
 const KALSHI_BASE = "https://api.elections.kalshi.com/trade-api/v2";
 const FETCH_TIMEOUT_MS = 15_000;
 const EVENTS_PAGE_LIMIT = 200;
-const MAX_EVENT_PAGES = 5;
-const MAX_CONCURRENT_MARKET_FETCHES = 10;
+// 3 pages × 200 events = 600 events max. Each page with with_nested_markets=true
+// returns 2-5MB; 3 pages stays well within a 45s cold-start budget.
+// Increasing this risks timeouts and does not meaningfully improve Pulse quality.
+const MAX_EVENT_PAGES = 3;
 
-interface KalshiEventSummary {
+// Raw event shape from GET /events?with_nested_markets=true
+interface KalshiEventWithMarkets {
   event_ticker: string;
+  series_ticker: string;
   category: string;
   title: string;
-  series_ticker: string;
+  markets?: KalshiMarket[];
 }
 
 /**
- * Fetch one page of Kalshi events.
- * Events have a `category` field directly (e.g. "Politics", "Climate and Weather").
- * Returns { events, cursor } where cursor is null on the last page.
+ * Fetch one page of Kalshi events WITH nested markets embedded.
+ * Using with_nested_markets=true eliminates the per-event /markets fan-out
+ * (was up to 1,000 individual calls; now ~5 pages total).
+ * status=open filters to active events only.
+ * min_close_ts=now filters out events where all markets have already closed.
  */
-async function fetchEventsPage(
-  cursor?: string
-): Promise<{ events: KalshiEventSummary[]; cursor: string | null }> {
-  const params = new URLSearchParams({ limit: String(EVENTS_PAGE_LIMIT) });
+async function fetchEventsPage(cursor?: string): Promise<{
+  events: KalshiEventWithMarkets[];
+  cursor: string | null;
+}> {
+  const params = new URLSearchParams({
+    limit: String(EVENTS_PAGE_LIMIT),
+    with_nested_markets: "true",
+    status: "open",
+    min_close_ts: String(Math.floor(Date.now() / 1000)),
+  });
   if (cursor) params.set("cursor", cursor);
 
   const url = `${KALSHI_BASE}/events?${params.toString()}`;
-  const res = await fetchWithTimeout(url);
+  const res = await fetchWithTimeout(url, undefined, FETCH_TIMEOUT_MS);
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -35,50 +47,25 @@ async function fetchEventsPage(
   }
 
   const data = await res.json();
-  const events: KalshiEventSummary[] = (data.events ?? []).map(
+  const events: KalshiEventWithMarkets[] = (data.events ?? []).map(
     (e: Record<string, unknown>) => ({
       event_ticker: String(e.event_ticker ?? ""),
+      series_ticker: String(e.series_ticker ?? ""),
       category: String(e.category ?? "general"),
       title: String(e.title ?? ""),
-      series_ticker: String(e.series_ticker ?? ""),
-    })
+      markets: Array.isArray(e.markets) ? (e.markets as KalshiMarket[]) : [],
+    }),
   );
   return { events, cursor: data.cursor ?? null };
 }
 
 /**
- * Fetch all markets for a single event ticker.
- * Returns an empty array on any error so one bad event doesn't block the rest.
- */
-async function fetchMarketsForEvent(
-  eventTicker: string,
-  category: string
-): Promise<KalshiMarket[]> {
-  const params = new URLSearchParams({
-    event_ticker: eventTicker,
-    limit: "100",
-  });
-  const url = `${KALSHI_BASE}/markets?${params.toString()}`;
-  const res = await fetchWithTimeout(url);
-
-  if (!res.ok) {
-    console.warn(`[kalshi] ${res.status} fetching markets for event ${eventTicker}`);
-    return [];
-  }
-
-  const data = await res.json();
-  const markets: KalshiMarket[] = data.markets ?? [];
-  // Annotate each market with the event-level category (more reliable than series lookup)
-  return markets.map((m) => ({ ...m, category, series_ticker: m.event_ticker?.split("-")[0] }));
-}
-
-/**
- * Fetch all active Kalshi series (exported for external use if needed).
+ * Fetch all active Kalshi series (exported for series title/frequency enrichment).
  */
 export async function fetchKalshiSeries(): Promise<KalshiSeries[]> {
   const params = new URLSearchParams({ limit: "200" });
   const url = `${KALSHI_BASE}/series?${params.toString()}`;
-  const res = await fetchWithTimeout(url);
+  const res = await fetchWithTimeout(url, undefined, FETCH_TIMEOUT_MS);
   if (!res.ok) {
     console.warn(`[kalshi] Failed to fetch series: ${res.status}`);
     return [];
@@ -103,20 +90,20 @@ export interface KalshiOrderbookDepth {
 
 /**
  * Fetch full orderbook depth for a batch of Kalshi tickers.
- * Requests are serialised (one at a time) to avoid rate-limiting.
+ * Requests are serialised (one at a time) to stay within rate limits.
  * Returns a Map<ticker, depth>; missing/errored tickers are omitted.
  *
  * Only called when ENABLE_ORDERBOOK_DEPTH env var is set.
  */
 export async function fetchKalshiOrderbooks(
-  tickers: string[]
+  tickers: string[],
 ): Promise<Map<string, KalshiOrderbookDepth>> {
   const result = new Map<string, KalshiOrderbookDepth>();
   for (const ticker of tickers) {
     const url = `${KALSHI_BASE}/market/${encodeURIComponent(ticker)}/orderbook`;
     let res: Response;
     try {
-      res = await fetchWithTimeout(url);
+      res = await fetchWithTimeout(url, undefined, FETCH_TIMEOUT_MS);
     } catch {
       continue;
     }
@@ -138,7 +125,7 @@ export async function fetchKalshiOrderbooks(
     };
 
     result.set(ticker, {
-      bids: parseLevel(ob.yes),  // yes bids = ascending price = buyers of YES
+      bids: parseLevel(ob.yes),  // yes bids = buyers of YES
       asks: parseLevel(ob.no),   // no bids = equivalent to YES asks
     });
   }
@@ -146,18 +133,46 @@ export async function fetchKalshiOrderbooks(
 }
 
 // ---------------------------------------------------------------------------
-// Batch candlestick requests: up to 100 tickers per POST body
+// Batch candlestick requests: up to 100 tickers per request
 const CANDLESTICK_BATCH_SIZE = 100;
-// Fetch 35 days of daily candles — enough for 1d/7d/30d deltas
+// Fetch 35 days of daily candles — enough for 7d/30d deltas (1d now from previous_price_dollars)
 const CANDLESTICK_LOOKBACK_DAYS = 35;
+let warnedCandlestick404 = false;
+
+async function fetchLegacyBatchCandlesticks(
+  tickers: string[],
+  startTs: number,
+  endTs: number,
+): Promise<Response | null> {
+  const url = `${KALSHI_BASE}/market/batch_candlesticks`;
+  try {
+    return await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tickers,
+          start_ts: startTs,
+          end_ts: endTs,
+          period_interval: 1440,
+        }),
+      },
+      FETCH_TIMEOUT_MS,
+    );
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Fetch daily OHLCV candlesticks for a set of tickers via the batch endpoint.
  * Returns a map of ticker → KalshiCandle[] (sorted ascending by ts).
- * On any error the affected tickers are silently omitted.
+ * Used for oneWeekChange and oneMonthChange; oneDayChange is now derived
+ * directly from previous_price_dollars on the market object.
  */
 export async function fetchKalshiCandlesticks(
-  tickers: string[]
+  tickers: string[],
 ): Promise<Map<string, KalshiCandle[]>> {
   const result = new Map<string, KalshiCandle[]>();
   if (tickers.length === 0) return result;
@@ -167,57 +182,94 @@ export async function fetchKalshiCandlesticks(
 
   for (let i = 0; i < tickers.length; i += CANDLESTICK_BATCH_SIZE) {
     const batch = tickers.slice(i, i + CANDLESTICK_BATCH_SIZE);
-    const url = `${KALSHI_BASE}/market/batch_candlesticks`;
+    const params = new URLSearchParams({
+      market_tickers: batch.join(","),
+      start_ts: String(startTs),
+      end_ts: String(endTs),
+      period_interval: "1440",
+    });
+    const url = `${KALSHI_BASE}/markets/candlesticks?${params.toString()}`;
     let res: Response;
     try {
-      res = await fetchWithTimeout(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tickers: batch,
-          start_ts: startTs,
-          end_ts: endTs,
-          period_interval: 1440,
-        }),
-      }, FETCH_TIMEOUT_MS);
+      res = await fetchWithTimeout(url, undefined, FETCH_TIMEOUT_MS);
     } catch (err) {
-      console.warn("[kalshi] batch_candlesticks fetch error:", err);
+      console.warn("[kalshi] markets/candlesticks fetch error:", err);
       continue;
     }
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.warn(`[kalshi] batch_candlesticks ${res.status}: ${body}`);
-      continue;
+      if (res.status === 404) {
+        if (!warnedCandlestick404) {
+          warnedCandlestick404 = true;
+          console.warn(`[kalshi] markets/candlesticks 404, trying legacy fallback: ${body.slice(0, 180)}`);
+        }
+        const legacyRes = await fetchLegacyBatchCandlesticks(batch, startTs, endTs);
+        if (!legacyRes || !legacyRes.ok) {
+          const legacyBody = legacyRes ? await legacyRes.text().catch(() => "") : "";
+          console.warn(`[kalshi] legacy batch_candlesticks failed: ${legacyRes?.status ?? "no_response"} ${legacyBody.slice(0, 120)}`);
+          continue;
+        }
+        res = legacyRes;
+      } else {
+        console.warn(`[kalshi] markets/candlesticks ${res.status}: ${body}`);
+        continue;
+      }
     }
 
     let data: unknown;
     try {
       data = await res.json();
     } catch {
-      console.warn("[kalshi] batch_candlesticks invalid JSON");
+      console.warn("[kalshi] markets/candlesticks invalid JSON");
       continue;
     }
 
-    // Response shape: { candlesticks: { ticker: string, history: { open_price, high_price, low_price, close_price, volume, start_period_ts }[] }[] }
-    const items = (data as Record<string, unknown>).candlesticks;
-    if (!Array.isArray(items)) continue;
+    // Primary shape:
+    // { markets: [{ market_ticker, candlesticks: [{ end_period_ts, price: { close_dollars }, volume_fp }, ...] }] }
+    // Legacy shape:
+    // { candlesticks: [{ ticker, history: [{ open_price, close_price, ... }] }] }
+    const root = data as Record<string, unknown>;
+    const items = Array.isArray(root.markets) ? root.markets : Array.isArray(root.candlesticks) ? root.candlesticks : [];
+    if (!Array.isArray(items) || items.length === 0) continue;
 
     for (const item of items) {
-      const t = String((item as Record<string, unknown>).ticker ?? "");
+      const rec = item as Record<string, unknown>;
+      const t = String(rec.market_ticker ?? rec.ticker ?? "");
       if (!t) continue;
-      const history = (item as Record<string, unknown>).history;
-      if (!Array.isArray(history)) continue;
-      const candles: KalshiCandle[] = history.map((h: Record<string, unknown>) => ({
-        ticker: t,
-        open: parseFloat(String(h.open_price ?? "0")) || 0,
-        high: parseFloat(String(h.high_price ?? "0")) || 0,
-        low: parseFloat(String(h.low_price ?? "0")) || 0,
-        close: parseFloat(String(h.close_price ?? "0")) || 0,
-        volume: parseFloat(String(h.volume ?? "0")) || 0,
-        ts: Number(h.start_period_ts ?? 0),
-      }));
-      // Sort ascending so index 0 = oldest
+
+      const sticks = rec.candlesticks;
+      const history = rec.history;
+      const rawCandles = Array.isArray(sticks) ? sticks : Array.isArray(history) ? history : [];
+      if (rawCandles.length === 0) continue;
+
+      const candles: KalshiCandle[] = rawCandles.map((h: Record<string, unknown>) => {
+        const price = (h.price as Record<string, unknown> | undefined) ?? {};
+        const yesBid = (h.yes_bid as Record<string, unknown> | undefined) ?? {};
+
+        // Backward-compatible parsing across old/new shapes.
+        const close =
+          parseFloat(String(price.close_dollars ?? yesBid.close_dollars ?? h.close_price ?? "0")) || 0;
+        const open =
+          parseFloat(String(price.open_dollars ?? yesBid.open_dollars ?? h.open_price ?? close)) || close;
+        const high =
+          parseFloat(String(price.high_dollars ?? yesBid.high_dollars ?? h.high_price ?? close)) || close;
+        const low =
+          parseFloat(String(price.low_dollars ?? yesBid.low_dollars ?? h.low_price ?? close)) || close;
+        const volume = parseFloat(String(h.volume_fp ?? h.volume ?? "0")) || 0;
+        const endTs = Number(h.end_period_ts ?? h.start_period_ts ?? 0);
+
+        return {
+          ticker: t,
+          open,
+          high,
+          low,
+          close,
+          volume,
+          ts: endTs,
+        };
+      });
+
       candles.sort((a, b) => a.ts - b.ts);
       result.set(t, candles);
     }
@@ -227,66 +279,61 @@ export async function fetchKalshiCandlesticks(
 }
 
 /**
- * Fetch all active Kalshi markets via the events topology:
- *   1. Paginate /events (up to MAX_EVENT_PAGES × 200 = 1,000 events)
- *   2. Batch-fetch /markets?event_ticker=X in groups of MAX_CONCURRENT_MARKET_FETCHES
- *   3. Each market is annotated with the event-level category string
- *   4. Fetch 35-day daily candlesticks for all active tickers (batch endpoint)
- *   5. Fetch series list to provide recurring-event context (title, frequency)
- *
- * This is the correct approach because:
- *   - The raw /markets paginator returns MVE (sports-parlay) markets first, which are unpriced
- *   - /events includes the `category` field directly (no series lookup required)
- *   - Standard binary markets (politics, crypto, etc.) are reliably accessible via event_ticker filter
+ * Fetch all active Kalshi markets using the nested-markets API:
+ *   1. Paginate /events?with_nested_markets=true&status=open (up to MAX_EVENT_PAGES)
+ *      → eliminates the old per-event /markets fan-out (~1,000 calls → ~5 calls)
+ *   2. Extract markets from event.markets[] — already includes all pricing fields
+ *      including previous_price_dollars for direct 24h change computation
+ *   3. Fetch series list for recurring-event context (title, frequency) in parallel
+ *   4. Fetch daily candlesticks in batch for active tickers (for 7d/30d deltas)
  */
 export async function fetchAllKalshiMarkets(): Promise<{
   markets: KalshiMarket[];
   candleMap: Map<string, KalshiCandle[]>;
   seriesMap: Map<string, KalshiSeries>;
 }> {
-  // Step 1: Collect all event summaries + series list in parallel
-  const [eventsResult, seriesRaw] = await Promise.all([
+  // Step 1: Paginate events (with nested markets) + fetch series list in parallel
+  const [allEvents, seriesRaw] = await Promise.all([
     (async () => {
-      const allEvents: KalshiEventSummary[] = [];
+      const events: KalshiEventWithMarkets[] = [];
       let cursor: string | null | undefined = undefined;
       for (let page = 0; page < MAX_EVENT_PAGES; page++) {
         const result = await fetchEventsPage(cursor ?? undefined);
-        allEvents.push(...result.events);
+        events.push(...result.events);
         cursor = result.cursor;
         if (!cursor) break;
       }
-      return allEvents;
+      return events;
     })(),
     fetchKalshiSeries(),
   ]);
 
-  // Build seriesMap: ticker → KalshiSeries for O(1) enrichment
+  // Build seriesMap: series_ticker → KalshiSeries for O(1) enrichment
   const seriesMap = new Map<string, KalshiSeries>();
   for (const s of seriesRaw) {
     if (s.ticker) seriesMap.set(s.ticker, s);
   }
 
-  const allEvents = eventsResult;
   if (allEvents.length === 0) return { markets: [], candleMap: new Map(), seriesMap };
 
-  // Step 2: Batch-fetch markets for all events, MAX_CONCURRENT at a time
+  // Step 2: Extract markets from nested events, annotating each with event-level category
   const allMarkets: KalshiMarket[] = [];
-
-  for (let i = 0; i < allEvents.length; i += MAX_CONCURRENT_MARKET_FETCHES) {
-    const batch = allEvents.slice(i, i + MAX_CONCURRENT_MARKET_FETCHES);
-    const results = await Promise.all(
-      batch.map((e) => fetchMarketsForEvent(e.event_ticker, e.category))
-    );
-    for (const markets of results) {
-      allMarkets.push(...markets);
+  for (const event of allEvents) {
+    for (const market of event.markets ?? []) {
+      allMarkets.push({
+        ...market,
+        category: event.category,
+        series_ticker: event.series_ticker || market.event_ticker?.split("-")[0],
+      });
     }
   }
 
-  // Step 3: Fetch daily candlesticks for all active market tickers
+  // Step 3: Pull daily candle history in batches to recover 7d/30d metrics.
+  // If this fetch fails, downstream processing gracefully falls back to 24h-only.
   const activeTickers = allMarkets
     .filter((m) => m.status === "active")
     .map((m) => m.ticker);
-  const candleMap = await fetchKalshiCandlesticks(activeTickers);
+  const candleMap = await fetchKalshiCandlesticks(activeTickers).catch(() => new Map());
 
   return { markets: allMarkets, candleMap, seriesMap };
 }

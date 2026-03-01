@@ -1,13 +1,45 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import MarketTable from "@/components/MarketTable";
 import PulseDashboard from "@/components/PulseDashboard";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import PulseLogo from "@/components/PulseLogo";
+import HeaderBar from "@/components/HeaderBar";
+import HeroSection from "@/components/HeroSection";
+import { streamAllMarkets, streamGetMarkets, isCacheWarm } from "@/lib/cached-sources";
+import { computePulse } from "@/lib/pulse";
+import type { PulseApiResponse, MarketsApiResponse } from "@/lib/types";
 
-// Page shell renders immediately; data loads client-side via SWR from /api/markets and /api/pulse.
-// Removing the blocking SSR fetchAllSources() call avoids a 60-90s white screen caused by
-// Kalshi rate-limiting (429s) on cold starts.
+// ---------------------------------------------------------------------------
+// Async RSC sections — stream server-side data when cache is warm.
+// On cold start (cache empty) they render immediately with no data,
+// deferring to client-side SWR — this prevents blocking the entire
+// Next.js rendering queue during the first upstream fetch.
+// ---------------------------------------------------------------------------
+
+async function PulseSection() {
+  if (!isCacheWarm()) return <PulseDashboard />;
+  try {
+    const markets = await streamAllMarkets();
+    const indices = computePulse(markets);
+    const initialData: PulseApiResponse = { indices, computedAt: new Date().toISOString() };
+    return <PulseDashboard initialData={initialData} />;
+  } catch {
+    return <PulseDashboard />;
+  }
+}
+
+async function MarketsSection() {
+  if (!isCacheWarm()) return <MarketTable />;
+  try {
+    const initialData: MarketsApiResponse = await streamGetMarkets({ sort: "movers", category: "all", offset: 0 });
+    return <MarketTable initialData={initialData} />;
+  } catch {
+    return <MarketTable />;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Page shell — renders instantly (static HTML), data sections stream in
+// ---------------------------------------------------------------------------
+
 export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -32,42 +64,17 @@ export default function HomePage() {
           }),
         }}
       />
-      {/* Header */}
-      <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur-sm">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 h-12 flex items-center gap-3">
-          {/* Logo */}
-          <div className="flex items-center gap-2 shrink-0">
-            <PulseLogo size="sm" />
-            <span className="font-semibold text-sm tracking-tight">Predpulse</span>
-          </div>
+      <HeaderBar />
 
-          {/* Spacer */}
-          <div className="flex-1" />
-
-          {/* Pulse nav link — subtle, right-aligned */}
-          <Link
-            href="/pulse"
-            className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted/50 shrink-0"
-          >
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            Pulse
-          </Link>
-
-          {/* Market count — rendered by MarketTable once data loads */}
-
-          {/* Theme toggle */}
-          <ThemeToggle />
-        </div>
-      </header>
+      <HeroSection />
 
       {/* Page content */}
-      <main className="flex-1 max-w-screen-2xl w-full mx-auto px-4 sm:px-6 pt-0 pb-6 flex flex-col">
-        {/* Pulse hero — above the fold */}
+      <main className="flex-1 max-w-screen-2xl w-full mx-auto px-4 sm:px-6 pb-6 flex flex-col">
         <Suspense fallback={null}>
-          <PulseDashboard />
+          <PulseSection />
         </Suspense>
 
-        {/* "Markets" label — left-aligned, no broken horizontal rule */}
+        {/* "Markets" label */}
         <div className="mb-1">
           <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">
             Markets
@@ -81,7 +88,7 @@ export default function HomePage() {
             </div>
           }
         >
-          <MarketTable />
+          <MarketsSection />
         </Suspense>
       </main>
 

@@ -1,14 +1,15 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getAllMarkets } from "@/lib/get-markets";
+import { streamAllMarkets, isCacheWarm } from "@/lib/cached-sources";
 import { computePulse } from "@/lib/pulse";
 import type { PulseApiResponse } from "@/lib/types";
 import PulseDashboard from "@/components/PulseDashboard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ChevronLeft } from "lucide-react";
 
-export const dynamic = "force-dynamic";
+// Streaming RSC — shell renders immediately; PulseSection streams in when data is ready.
+// No force-dynamic needed: Next.js infers dynamic rendering from the async data fetch.
 
 export const metadata: Metadata = {
   alternates: { canonical: "/pulse" },
@@ -33,17 +34,20 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function PulsePage() {
-  // SSR: compute initial Pulse data server-side to avoid layout shift
-  let initialData: PulseApiResponse | undefined;
+// Async RSC that streams Pulse data — renders when getCachedSources() resolves
+async function PulseSection() {
+  if (!isCacheWarm()) return <PulseDashboard large />;
   try {
-    const markets = await getAllMarkets();
+    const markets = await streamAllMarkets();
     const indices = computePulse(markets);
-    initialData = { indices, computedAt: new Date().toISOString() };
+    const initialData: PulseApiResponse = { indices, computedAt: new Date().toISOString() };
+    return <PulseDashboard initialData={initialData} large />;
   } catch {
-    // Fallback: client-side SWR will handle the fetch
+    return <PulseDashboard large />;
   }
+}
 
+export default function PulsePage() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur-sm">
@@ -70,8 +74,8 @@ export default async function PulsePage() {
           </div>
           <p className="text-sm text-muted-foreground max-w-xl">
             A proprietary composite sentiment index across 8 market categories. Each score
-            synthesizes probability, momentum, breadth, volume, and cross-platform consensus
-            from both Polymarket and Kalshi.
+            synthesizes polarity-adjusted momentum, flow, breadth, acceleration, and optional
+            microstructure signals across Polymarket and Kalshi.
           </p>
           <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
@@ -92,22 +96,22 @@ export default async function PulsePage() {
             </div>
           }
         >
-          <PulseDashboard initialData={initialData} large />
+          <PulseSection />
         </Suspense>
 
         {/* Methodology disclosure */}
         <div className="mt-8 p-4 rounded-xl border border-border bg-muted/20 text-xs text-muted-foreground space-y-1.5">
           <p className="font-semibold text-foreground/70 uppercase tracking-wider text-[10px]">Methodology</p>
           <p>
-            Each Pulse score (0–100) is a weighted composite of six signals: open-interest-weighted
-            probability (30%), volume-weighted probability (20%), 7-day momentum (20%), market breadth
-            — the share of markets trending positively (15%), time-decay-weighted probability (10%),
-            and a cross-platform consensus penalty that reduces confidence when Polymarket and Kalshi
-            disagree significantly (5%).
+            Pulse is now the directional family alias in the operator index stack. The directional
+            score uses polarity-adjusted signals with robust rolling normalization: momentum (30%),
+            flow (25%), breadth (15%), acceleration (15%), plus optional orderflow (10%) and smart-money
+            (5%) when minimum coverage gates are met.
           </p>
           <p>
-            Scores update every 60 seconds. Historical snapshots are retained for 48 hours in memory
-            to power the sparkline charts. Not financial advice.
+            Confidence is computed as data freshness × source agreement × feature coverage.
+            Snapshots persist every 5 minutes for stable 24h deltas and backtesting support.
+            Not financial advice.
           </p>
         </div>
       </main>
