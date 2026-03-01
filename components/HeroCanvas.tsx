@@ -134,7 +134,7 @@ export default function HeroCanvas({ className = "" }: { className?: string }) {
       return document.documentElement.classList.contains("dark");
     }
 
-    function drawGrid(_s: CanvasState, _d: boolean) {
+    function drawGrid() {
       // Grid lines removed -- clean minimal background
     }
 
@@ -200,7 +200,7 @@ export default function HeroCanvas({ className = "" }: { className?: string }) {
 
     if (reducedMotion) {
       const d = dark();
-      drawGrid(s, d);
+      drawGrid();
       drawWave(s, 0, d, true);
       return;
     }
@@ -222,7 +222,7 @@ export default function HeroCanvas({ className = "" }: { className?: string }) {
       // headX increments forever -- modulo gives seamless loop with no flash
       const drawX = st.headX % st.w;
 
-      drawGrid(st, d);
+      drawGrid();
       drawWave(st, drawX, d);
       drawScanPulse(st, drawX, d);
       drawParticles(st, d);
