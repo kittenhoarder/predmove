@@ -2,22 +2,10 @@
 
 import useSWR from "swr";
 import type { PulseApiResponse, PulseIndex } from "@/lib/types";
+import { fetchPulseApi } from "@/lib/pulse-client";
 import PulseCard from "./PulseCard";
 
 export const PULSE_SWR_KEY = "/api/pulse";
-
-async function pulseFetcher(url: string): Promise<PulseApiResponse> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
-  let res: Response;
-  try {
-    res = await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
 
 interface PulseDashboardProps {
   initialData?: PulseApiResponse;
@@ -28,7 +16,7 @@ interface PulseDashboardProps {
 export default function PulseDashboard({ initialData, large = false }: PulseDashboardProps) {
   const { data, isLoading, error } = useSWR<PulseApiResponse>(
     PULSE_SWR_KEY,
-    pulseFetcher,
+    fetchPulseApi,
     {
       fallbackData: initialData,
       refreshInterval: 120_000,

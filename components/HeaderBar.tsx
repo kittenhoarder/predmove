@@ -4,30 +4,18 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import type { PulseApiResponse, PulseIndex } from "@/lib/types";
+import { fetchPulseApi } from "@/lib/pulse-client";
 import { PULSE_SWR_KEY } from "./PulseDashboard";
 import PulseLogo from "./PulseLogo";
 import { ThemeToggle } from "./ThemeToggle";
 import CompactPulseCard from "./CompactPulseCard";
 import PulseDrawer from "./PulseDrawer";
 
-async function pulseFetcher(url: string): Promise<PulseApiResponse> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
-  let res: Response;
-  try {
-    res = await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
 export default function HeaderBar() {
   const [showCompact, setShowCompact] = useState(false);
   const [drawerIndex, setDrawerIndex] = useState<PulseIndex | null>(null);
 
-  const { data } = useSWR<PulseApiResponse>(PULSE_SWR_KEY, pulseFetcher, {
+  const { data } = useSWR<PulseApiResponse>(PULSE_SWR_KEY, fetchPulseApi, {
     refreshInterval: 120_000,
     revalidateOnFocus: false,
   });
