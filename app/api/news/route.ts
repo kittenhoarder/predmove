@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
         const domain = new URL(r.webUrl).hostname.replace(/^www\./, "");
         // Convert Guardian ISO date to GDELT-style seendate for shared rendering
         const seendate = r.webPublicationDate
-          ? r.webPublicationDate.replace(/[-:T]/g, "").replace(/\.\d+Z$/, "Z").slice(0, 15) + "00Z"
+          ? r.webPublicationDate.replace(/-/g, "").replace(/:/g, "").replace(/\.\d+Z$/, "Z")
           : "";
         return {
           url: r.webUrl,
