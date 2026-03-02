@@ -6,6 +6,7 @@ import { formatDistanceToNow, parse } from "date-fns";
 import type { GdeltArticle, MarketsApiResponse, ProcessedMarket } from "@/lib/types";
 import { ToneBadge, toneGradientClass } from "@/lib/tone";
 import { matchArticlesToMarkets, buildNewsroomQuery } from "@/lib/match-markets";
+import { marketTradeUrl } from "@/lib/format";
 import { ExternalLink } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -58,9 +59,17 @@ function MarketChip({ market }: { market: ProcessedMarket }) {
       ? market.question.slice(0, 52) + "…"
       : market.question;
 
+  // Internal /market/[slug] only exists for Polymarket (Gamma). Kalshi/Manifold link out.
+  const href =
+    market.source === "polymarket"
+      ? `/market/${market.eventSlug}`
+      : marketTradeUrl(market.source, market.eventSlug);
+  const isExternal = market.source !== "polymarket";
+
   return (
     <a
-      href={`/market/${market.eventSlug}`}
+      href={href}
+      {...(isExternal && { target: "_blank", rel: "noopener noreferrer" })}
       onClick={(e) => e.stopPropagation()}
       aria-label={`${market.question} — ${prob}% yes`}
       className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-muted/60 hover:bg-muted transition-colors text-[11px] w-full group"
@@ -131,38 +140,38 @@ function StoryCard({ article, markets }: { article: NewsArticle; markets: Proces
         </h3>
       </div>
 
-      {/* Bottom body: either related markets or article summary */}
-      <div className="flex flex-col gap-2 p-3 flex-1">
-        {markets.length > 0 ? (
-          <div className="flex flex-col gap-1">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium mb-0.5">
-              Related markets
-            </p>
-            {markets.map((m) => (
-              <MarketChip key={m.id} market={m} />
-            ))}
-          </div>
-        ) : article.summary ? (
-          <p className="text-xs text-muted-foreground leading-snug line-clamp-3">
-            {article.summary}
-          </p>
-        ) : null}
-
-        {/* Footer row: consistent across all cards */}
-        <div className="mt-2 flex items-center justify-between text-[11px]">
-          <span className="text-muted-foreground/60">
-            {markets.length > 0 ? `${markets.length} related markets` : "No direct markets yet"}
+      {/* Content: top row has label + Read article link; body is chips or summary (no extra link row) */}
+      <div className="flex flex-col p-3 flex-1 min-h-[7.5rem]">
+        <div className="flex items-center justify-between gap-2 mb-1.5 shrink-0">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium">
+            {markets.length > 0 ? "Related markets" : article.summary ? "Article" : ""}
           </span>
           <a
             href={article.url}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+            className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors shrink-0"
+            aria-label={`Read article: ${article.title}`}
           >
             Read article <ExternalLink className="w-3 h-3" />
           </a>
         </div>
+        {markets.length > 0 ? (
+          <div className="flex flex-col gap-1 flex-1 min-h-0">
+            {markets.map((m) => (
+              <MarketChip key={m.id} market={m} />
+            ))}
+          </div>
+        ) : article.summary ? (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <p className="text-sm text-muted-foreground leading-relaxed line-clamp-6">
+              {article.summary}
+            </p>
+          </div>
+        ) : (
+          <div className="flex-1 min-h-0" />
+        )}
       </div>
     </article>
   );
