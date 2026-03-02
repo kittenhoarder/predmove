@@ -234,8 +234,11 @@ export default function NewsroomSection() {
     { refreshInterval: 300_000, revalidateOnFocus: false, keepPreviousData: true }
   );
 
-  const articles = newsData?.articles ?? [];
-  const allMarkets: ProcessedMarket[] = marketsData?.markets ?? [];
+  const articles = useMemo(() => newsData?.articles ?? [], [newsData?.articles]);
+  const allMarkets = useMemo(
+    () => (marketsData?.markets ?? []) as ProcessedMarket[],
+    [marketsData?.markets]
+  );
 
   // Match each article to the most relevant prediction markets — pure client computation
   const stories: StoryWithMarkets[] = useMemo(

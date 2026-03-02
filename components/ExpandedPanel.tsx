@@ -1101,7 +1101,7 @@ function MarketContext({
               {fredData!.map((s) => (
                 <ContextSparkline
                   key={s.seriesId}
-                  data={s.data as ({ date: string } & Record<string, number>)[]}
+                  data={s.data as unknown as ({ date: string } & Record<string, number>)[]}
                   dataKey="value"
                   label={s.label}
                   formatValue={(v) =>
@@ -1117,7 +1117,7 @@ function MarketContext({
             </div>
           ) : hasGecko ? (
             <ContextSparkline
-              data={(geckoData as { coinId: string; data: CoinGeckoPricePoint[] }).data as ({ date: string } & Record<string, number>)[]}
+              data={(geckoData as { coinId: string; data: CoinGeckoPricePoint[] }).data as unknown as ({ date: string } & Record<string, number>)[]}
               dataKey="price"
               label={`${coinLabel((geckoData as { coinId: string; data: CoinGeckoPricePoint[] }).coinId)} Price (90d)`}
               formatValue={(v) =>
