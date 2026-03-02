@@ -74,6 +74,9 @@ describe("processKalshiMarkets", () => {
     expect(result[0].source).toBe("kalshi");
     expect(result[0].id).toBe("KXTEST-YES");
     expect(result[0].currentPrice).toBeCloseTo(52, 0);
+    expect(result[0].bestBid).toBeCloseTo(0.48, 3);
+    expect(result[0].bestAsk).toBeCloseTo(0.52, 3);
+    expect(result[0].spread).toBeCloseTo(0.04, 3);
     expect(result[0].categoryslugs).toContain("politics");
   });
 
