@@ -76,11 +76,18 @@ function normalizeCategory(raw: string | undefined): { slug: string; label: stri
 }
 
 /** Parse Kalshi FixedPoint dollar string to a 0–100 probability percentage. */
-function fpToPrice(fp: string | undefined): number {
+function fpToPercent(fp: string | undefined): number {
   const val = parseFloat(fp ?? "0");
   if (isNaN(val)) return 0;
   // Kalshi prices are in dollars where $1.00 = 100% probability
   return Math.round(val * 10000) / 100;
+}
+
+/** Parse Kalshi FixedPoint dollar string to a 0–1 fractional probability. */
+function fpToFraction(fp: string | undefined): number {
+  const val = parseFloat(fp ?? "0");
+  if (isNaN(val)) return 0;
+  return Math.min(1, Math.max(0, val));
 }
 
 /** Parse Kalshi FixedPoint string to a plain number (volume, open interest). */
@@ -153,9 +160,9 @@ function processKalshiMarket(
   if (market.status !== "active") return null;
   if (!market.yes_ask_dollars && !market.last_price_dollars) return null;
 
-  const currentPrice = fpToPrice(market.yes_ask_dollars || market.last_price_dollars);
-  const bestBid = fpToPrice(market.yes_bid_dollars);
-  const bestAsk = fpToPrice(market.yes_ask_dollars);
+  const currentPrice = fpToPercent(market.yes_ask_dollars || market.last_price_dollars);
+  const bestBid = fpToFraction(market.yes_bid_dollars);
+  const bestAsk = fpToFraction(market.yes_ask_dollars);
   const spread = Math.max(0, bestAsk - bestBid);
 
   const { slug, label } = normalizeCategory(market.category);
@@ -172,7 +179,7 @@ function processKalshiMarket(
   // previous_price_dollars is provided by the nested-markets API; prefer it over candle
   // approximation since it's the authoritative 24h-ago price from the exchange.
   const oneDayChange = market.previous_price_dollars
-    ? Math.round((fpToPrice(market.last_price_dollars) - fpToPrice(market.previous_price_dollars)) * 10) / 10
+    ? Math.round((fpToPercent(market.last_price_dollars) - fpToPercent(market.previous_price_dollars)) * 10) / 10
     : candleOneDayChange;
 
   // Build a human-readable event slug from the event_ticker for URL construction
